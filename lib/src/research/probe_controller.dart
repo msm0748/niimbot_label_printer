@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:math';
 import 'dart:typed_data';
 
 import '../ble/ble_failure.dart';
 import '../ble/ble_models.dart';
 import '../ble/ble_transport.dart';
+import 'captured_test_print.dart';
 import 'hex_codec.dart';
 import 'probe_event.dart';
 
@@ -175,6 +177,8 @@ final class ProbeController {
   final List<ProbeEvent> _events = <ProbeEvent>[];
   final _DroppingEventBroadcaster _eventBroadcaster =
       _DroppingEventBroadcaster();
+  final StreamController<Uint8List> _protocolNotifications =
+      StreamController<Uint8List>.broadcast(sync: true);
   final Map<String, StreamSubscription<Uint8List>> _notificationSubscriptions =
       <String, StreamSubscription<Uint8List>>{};
 
@@ -194,6 +198,7 @@ final class ProbeController {
   BleDeviceId? _connectionDevice;
   var _connectionGeneration = 0;
   var _connectionSetupStarted = false;
+  var _printingCapturedTestLabel = false;
   var _lifecycle = _ProbeLifecycle.idle;
 
   BleReadiness _readiness;
@@ -753,6 +758,7 @@ final class ProbeController {
                 '${characteristic.characteristicUuid} '
                 '${_formatPayload(immutableBytes)}',
               );
+              _protocolNotifications.add(immutableBytes);
             },
             onError: (Object error) {
               _recordError('subscription failed', error);
@@ -803,6 +809,148 @@ final class ProbeController {
       _recordError('write failed', error);
       rethrow;
     }
+  }
+
+  Future<void> printCapturedTestLabel(
+    BleCharacteristic characteristic, {
+    Duration interWriteDelay = const Duration(milliseconds: 80),
+    Duration statusPollDelay = const Duration(milliseconds: 250),
+    Duration responseTimeout = const Duration(seconds: 2),
+    int maxStatusPolls = 20,
+  }) async {
+    _ensureConnected('print a captured test label');
+    if (_printingCapturedTestLabel) {
+      throw StateError('A captured test print is already in progress.');
+    }
+    if (!characteristic.canNotify ||
+        !characteristic.properties.contains(
+          BleCharacteristicProperty.writeWithoutResponse,
+        )) {
+      throw StateError(
+        'Captured test printing requires notify and writeWithoutResponse.',
+      );
+    }
+
+    final writes = capturedTestPrintWrites(sessionId: _newSessionId());
+    final largestWrite = writes.fold<int>(
+      0,
+      (largest, write) => write.length > largest ? write.length : largest,
+    );
+    final mtu = _mtu;
+    if (mtu == null || mtu < largestWrite + 3) {
+      throw StateError(
+        'Captured test printing requires MTU ${largestWrite + 3} or larger; '
+        'negotiated MTU is ${mtu ?? 'unknown'}.',
+      );
+    }
+
+    _printingCapturedTestLabel = true;
+    try {
+      await subscribe(characteristic);
+      final deviceId = _connectedDevice!;
+
+      const expectedResponses = <int>[
+        0x00,
+        0x33,
+        0x31,
+        0x02,
+        0x14,
+        0xB3,
+        0xD3,
+        0xB3,
+        0xD3,
+        0xE4,
+      ];
+      for (var index = 0; index < writes.length; index++) {
+        await _writeAndWaitForCommand(
+          deviceId,
+          characteristic,
+          writes[index],
+          expectedResponses[index],
+          responseTimeout,
+        );
+        if (index < writes.length - 1) {
+          await Future<void>.delayed(interWriteDelay);
+        }
+      }
+
+      var completed = false;
+      for (var poll = 0; poll < maxStatusPolls; poll++) {
+        final status = await _writeAndWaitForCommand(
+          deviceId,
+          characteristic,
+          buildD11hCommand(0xA3, const <int>[0x01]),
+          0xB3,
+          responseTimeout,
+        );
+        if (_isCompletedPrintStatus(status)) {
+          completed = true;
+          break;
+        }
+        await Future<void>.delayed(statusPollDelay);
+      }
+      if (!completed) {
+        throw TimeoutException(
+          'Printer did not report print completion.',
+          statusPollDelay * maxStatusPolls,
+        );
+      }
+
+      await _writeAndWaitForCommand(
+        deviceId,
+        characteristic,
+        buildD11hCommand(0xF3, const <int>[0x01]),
+        0xF4,
+        responseTimeout,
+      );
+      await _writeAndWaitForCommand(
+        deviceId,
+        characteristic,
+        buildD11hCommand(0x19, const <int>[0x01, 0x01]),
+        0x00,
+        responseTimeout,
+      );
+    } catch (error) {
+      _recordError('captured test print failed', error);
+      rethrow;
+    } finally {
+      _printingCapturedTestLabel = false;
+    }
+  }
+
+  Future<Uint8List> _writeAndWaitForCommand(
+    BleDeviceId deviceId,
+    BleCharacteristic characteristic,
+    Uint8List bytes,
+    int expectedCommand,
+    Duration timeout,
+  ) async {
+    final response = _protocolNotifications.stream
+        .expand(splitD11hFrames)
+        .firstWhere((frame) => frame[2] == expectedCommand)
+        .timeout(timeout);
+    await _transport.write(
+      deviceId,
+      characteristic,
+      bytes,
+      mode: BleWriteMode.withoutResponse,
+    );
+    _record(
+      ProbeEventKind.write,
+      '${characteristic.characteristicUuid} ${_formatPayload(bytes)}',
+    );
+    return response;
+  }
+
+  bool _isCompletedPrintStatus(Uint8List frame) =>
+      frame.length >= 13 && frame[2] == 0xB3 && frame[5] == 0x01;
+
+  String _newSessionId() {
+    final random = Random.secure();
+    return List<int>.generate(
+      16,
+      (_) => random.nextInt(256),
+    ).map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
   }
 
   String exportSanitizedLog() =>
@@ -990,6 +1138,7 @@ final class ProbeController {
       await run(() => _performDisconnect(deviceId, redactionIds));
     }
     await run(_disposeTransport);
+    await run(_protocolNotifications.close);
     _eventBroadcaster.close();
 
     if (failure != null) {
