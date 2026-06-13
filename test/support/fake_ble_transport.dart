@@ -48,6 +48,7 @@ final class FakeBleTransport implements BleTransport {
   List<BleService> services;
   int negotiatedMtu;
   final List<FakeBleWrite> writes = [];
+  void Function(FakeBleWrite write)? writeResponder;
   Object? discoverServicesError;
   Completer<List<BleService>>? discoverServicesCompleter;
   Completer<int>? requestMtuCompleter;
@@ -175,14 +176,14 @@ final class FakeBleTransport implements BleTransport {
     required BleWriteMode mode,
   }) async {
     _ensureNotDisposed();
-    writes.add(
-      FakeBleWrite(
-        deviceId: deviceId,
-        characteristic: characteristic,
-        bytes: value,
-        mode: mode,
-      ),
+    final write = FakeBleWrite(
+      deviceId: deviceId,
+      characteristic: characteristic,
+      bytes: value,
+      mode: mode,
     );
+    writes.add(write);
+    writeResponder?.call(write);
   }
 
   @override

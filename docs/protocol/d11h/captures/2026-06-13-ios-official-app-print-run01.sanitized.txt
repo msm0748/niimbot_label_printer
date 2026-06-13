@@ -1,0 +1,92 @@
+# D11H official iOS app print trace, run 01
+
+Source: Apple PacketLogger `.pklg`
+Platform: iOS
+Operation: one small label print
+ATT connection handle: 0x0404
+ATT attribute handle: 0x000A
+Write mode: Write Command (without response)
+Receive mode: Handle Value Notification
+
+The original capture contained device identifiers and a 32-byte session value.
+Those fields are redacted below. The raw capture remains outside Git.
+
+Frame format observed in every complete frame:
+
+`55 55 | command | payload length | payload | XOR checksum | AA AA`
+
+The checksum is the XOR of `command`, `payload length`, and every payload byte.
+All 44 frames in the raw capture passed length, delimiter, and checksum checks.
+One ATT write contained five complete protocol frames concatenated in one value.
+
+## Pre-print polling
+
+Relative time is measured from the first print-sequence write.
+
+```text
+-3966 ms SEND 55 55 DC 01 04 D9 AA AA
+-3931 ms RECV 55 55 D9 0B 1F FD 04 4B 00 00 01 00 00 00 00 7E AA AA
+-1965 ms SEND 55 55 DC 01 04 D9 AA AA
+-1921 ms RECV 55 55 D9 0B 1F F9 04 4B 00 00 01 00 00 00 00 7A AA AA
+```
+
+## Print sequence
+
+`[redacted N bytes]` preserves the original field length but is not literal
+packet data.
+
+```text
+   +0 ms SEND 55 55 1A 01 01 1A AA AA
+ +119 ms RECV 55 55 1B 2C [redacted 29 bytes: device identifiers] 01 38 00 4A 01 [checksum] AA AA
+ +133 ms SEND 55 55 2C 01 01 2C AA AA
+ +179 ms RECV 55 55 00 01 01 00 AA AA
+ +181 ms SEND 55 55 23 01 01 23 AA AA
+ +239 ms RECV 55 55 33 01 01 33 AA AA
+ +241 ms SEND 55 55 21 01 03 23 AA AA
+ +299 ms RECV 55 55 31 01 01 31 AA AA
+ +306 ms SEND 55 55 01 09 00 01 00 00 00 00 00 01 00 08 AA AA
+ +419 ms RECV 55 55 02 01 01 02 AA AA
+ +425 ms SEND 55 55 13 2D 01 03 00 8D 00 01 00 00 00 00 01 00 00 [redacted 32 bytes: session value] [checksum] AA AA
+ +479 ms RECV 55 55 14 02 01 00 17 AA AA
+ +484 ms SEND 55 55 A3 01 01 A3 AA AA
+ +539 ms RECV 55 55 B3 08 00 00 00 00 15 17 00 00 B9 AA AA
+ +548 ms SEND 55 55 84 03 00 00 7C FB AA AA
+ +548 ms SEND 55 55 83 0A 00 7C 00 02 00 0B 00 4C 00 4B FB AA AA
+ +548 ms SEND 55 55 85 18 00 87 00 0C 00 01 00 00 00 00 00 00 00 00 7F F8 00 00 00 00 00 00 00 00 90 AA AA
+ +548 ms SEND 55 55 85 18 00 88 00 0A 00 01 00 00 00 00 00 00 00 00 3F F0 00 00 00 00 00 00 00 00 D1 AA AA
+ +548 ms SEND 55 55 84 03 00 89 3F 31 AA AA
+ +599 ms RECV 55 55 D3 03 00 C7 01 16 AA AA
+ +605 ms SEND 55 55 A3 01 01 A3 AA AA
+ +659 ms RECV 55 55 B3 08 00 00 00 00 15 12 00 00 BC AA AA
+ +667 ms SEND 55 55 84 03 00 C8 3B 74 AA AA
+ +779 ms RECV 55 55 D3 03 01 02 01 D2 AA AA
+ +784 ms SEND 55 55 E3 01 01 E3 AA AA
+ +869 ms RECV 55 55 E4 01 01 E4 AA AA
++1076 ms SEND 55 55 A3 01 01 A3 AA AA
++1139 ms RECV 55 55 B3 08 00 00 00 00 15 11 00 01 BE AA AA
++1350 ms SEND 55 55 A3 01 01 A3 AA AA
++1409 ms RECV 55 55 B3 08 00 00 1C 00 15 12 00 01 A1 AA AA
++1620 ms SEND 55 55 A3 01 01 A3 AA AA
++1680 ms RECV 55 55 B3 08 00 00 4F 00 15 16 00 01 F6 AA AA
++1890 ms SEND 55 55 A3 01 01 A3 AA AA
++1951 ms RECV 55 55 B3 08 00 00 64 5F 15 16 00 01 82 AA AA
++2163 ms SEND 55 55 A3 01 01 A3 AA AA
++2251 ms RECV 55 55 B3 08 00 01 64 64 15 16 00 00 B9 AA AA
++2261 ms SEND 55 55 F3 01 01 F3 AA AA
++2309 ms RECV 55 55 F4 01 01 F4 AA AA
++2313 ms SEND 55 55 19 02 01 01 1B AA AA
++2369 ms RECV 55 55 00 01 01 00 AA AA
+```
+
+## Observations
+
+- All application traffic in this capture used attribute handle `0x000A` for
+  both writes and notifications. The service and characteristic UUIDs cannot be
+  recovered because service discovery occurred before this capture began.
+- Commands `0x85` carry the only bitmap-like payloads in this print.
+- Repeated `0xA3` requests receive `0xB3` responses whose payload changes during
+  printing, making this pair a strong print-status/progress candidate.
+- `0x84` brackets or advances the data sent with `0x83` and `0x85`.
+- `0xE3/0xE4` occurs after all print data and before status polling completes.
+- `0xF3/0xF4` occurs after the final `0xB3` response reports a changed terminal
+  state.

@@ -52,6 +52,39 @@ void main() {
     expect(find.text('MTU 185'), findsOneWidget);
     expect(find.textContaining('fff0'), findsWidgets);
   });
+
+  testWidgets('confirms and sends the captured test print', (tester) async {
+    final transport = _ProbeTestTransport();
+    final controller = ProbeController(transport);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ProbePage(
+          controller: controller,
+          requestPermissions: () async => true,
+          scanDuration: const Duration(milliseconds: 20),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Scan for D11H'));
+    await tester.pump();
+    transport.emitAdvertisement();
+    await tester.pump(const Duration(milliseconds: 25));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('D11_H'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Print captured test label'));
+    await tester.pumpAndSettle();
+    expect(find.text('Send one test label?'), findsOneWidget);
+
+    await tester.tap(find.text('Print one label'));
+    await tester.pumpAndSettle(const Duration(milliseconds: 300));
+
+    expect(transport.writeCount, 13);
+    expect(find.text('Printer confirmed print completion.'), findsOneWidget);
+  });
 }
 
 final class _ProbeTestTransport implements BleTransport {
@@ -59,6 +92,8 @@ final class _ProbeTestTransport implements BleTransport {
   final _connections = StreamController<BleConnectionUpdate>.broadcast(
     sync: true,
   );
+  final _notifications = StreamController<Uint8List>.broadcast(sync: true);
+  int writeCount = 0;
 
   @override
   BleReadiness get currentReadiness => BleReadiness.ready;
@@ -123,7 +158,7 @@ final class _ProbeTestTransport implements BleTransport {
             characteristicUuid: 'fff1',
             properties: const <BleCharacteristicProperty>{
               BleCharacteristicProperty.notify,
-              BleCharacteristicProperty.write,
+              BleCharacteristicProperty.writeWithoutResponse,
             },
           ),
         ],
@@ -135,7 +170,7 @@ final class _ProbeTestTransport implements BleTransport {
   Stream<Uint8List> subscribe(
     BleDeviceId deviceId,
     BleCharacteristic characteristic,
-  ) => const Stream<Uint8List>.empty();
+  ) => _notifications.stream;
 
   @override
   Future<void> write(
@@ -143,7 +178,24 @@ final class _ProbeTestTransport implements BleTransport {
     BleCharacteristic characteristic,
     Uint8List bytes, {
     required BleWriteMode mode,
-  }) async {}
+  }) async {
+    writeCount++;
+    final command = splitD11hFrames(bytes).first[2];
+    final response = switch (command) {
+      0x2C => '55 55 00 01 01 00 AA AA',
+      0x23 => '55 55 33 01 01 33 AA AA',
+      0x21 => '55 55 31 01 01 31 AA AA',
+      0x01 => '55 55 02 01 01 02 AA AA',
+      0x13 => '55 55 14 02 01 00 17 AA AA',
+      0x84 => '55 55 D3 03 01 02 01 D2 AA AA',
+      0xA3 => '55 55 B3 08 00 01 64 64 15 16 00 00 B9 AA AA',
+      0xE3 => '55 55 E4 01 01 E4 AA AA',
+      0xF3 => '55 55 F4 01 01 F4 AA AA',
+      0x19 => '55 55 00 01 01 00 AA AA',
+      _ => throw StateError('Unexpected command $command'),
+    };
+    scheduleMicrotask(() => _notifications.add(parseHexBytes(response)));
+  }
 
   @override
   Future<int> requestMtu(BleDeviceId deviceId, int requestedMtu) async => 185;
@@ -152,5 +204,6 @@ final class _ProbeTestTransport implements BleTransport {
   Future<void> dispose() async {
     await _scan.close();
     await _connections.close();
+    await _notifications.close();
   }
 }

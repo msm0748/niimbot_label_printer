@@ -121,6 +121,44 @@ class _ProbePageState extends State<ProbePage> {
     }
   }
 
+  Future<void> _printCapturedTestLabel(BleCharacteristic characteristic) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Send one test label?'),
+        content: const Text(
+          'This replays the sanitized raster commands observed from the '
+          'official app. Keep one label loaded and use only a D11H.',
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Print one label'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    setState(() => _busy = true);
+    try {
+      await widget.controller.printCapturedTestLabel(characteristic);
+      _showMessage('Printer confirmed print completion.');
+    } catch (error) {
+      _showMessage('Captured test print failed: $error');
+    } finally {
+      if (mounted) {
+        setState(() => _busy = false);
+      }
+    }
+  }
+
   void _showMessage(String message) {
     if (!mounted) {
       return;
@@ -135,6 +173,7 @@ class _ProbePageState extends State<ProbePage> {
     final devices = widget.controller.devices.toList()
       ..sort((left, right) => right.rssi.compareTo(left.rssi));
     final connected = widget.controller.connectedDevice != null;
+    final capturedPrintCharacteristic = _findCapturedPrintCharacteristic();
 
     return Scaffold(
       appBar: AppBar(
@@ -177,6 +216,15 @@ class _ProbePageState extends State<ProbePage> {
                 onPressed: _busy ? null : _disconnect,
                 icon: const Icon(Icons.link_off),
                 label: const Text('Disconnect'),
+              ),
+            if (connected && capturedPrintCharacteristic != null)
+              FilledButton.icon(
+                onPressed: _busy
+                    ? null
+                    : () =>
+                          _printCapturedTestLabel(capturedPrintCharacteristic),
+                icon: const Icon(Icons.print_outlined),
+                label: const Text('Print captured test label'),
               ),
             const SizedBox(height: 16),
             Text('Devices', style: Theme.of(context).textTheme.titleLarge),
@@ -237,6 +285,20 @@ class _ProbePageState extends State<ProbePage> {
         ),
       ),
     );
+  }
+
+  BleCharacteristic? _findCapturedPrintCharacteristic() {
+    for (final service in widget.controller.services) {
+      for (final characteristic in service.characteristics) {
+        if (characteristic.canNotify &&
+            characteristic.properties.contains(
+              BleCharacteristicProperty.writeWithoutResponse,
+            )) {
+          return characteristic;
+        }
+      }
+    }
+    return null;
   }
 
   Widget _buildService(BleService service) {

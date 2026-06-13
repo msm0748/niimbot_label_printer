@@ -11,6 +11,7 @@ identifier.
 
 | Date | Phone | OS | D11H ID suffix | Firmware | Label media | Result |
 |---|---|---|---|---|---|---|
+| 2026-06-13 | iPhone (model redacted) | iOS (version not captured) | redacted | unknown | small label | official-app print trace captured |
 
 ## Advertising
 
@@ -58,10 +59,39 @@ A hypothesis is not a verified command. For each hypothesis, record:
 - an experiment that can confirm or reject it;
 - the result of that experiment.
 
+### iOS official-app print, run 01
+
+Sanitized trace:
+`captures/2026-06-13-ios-official-app-print-run01.sanitized.txt`
+
+Observed transport facts for this run:
+
+- ATT writes use Write Command (without response) on attribute handle `0x000A`.
+- responses arrive as Handle Value Notifications on attribute handle `0x000A`;
+- the protocol frame is `55 55`, command, payload length, payload, XOR
+  checksum, `AA AA`;
+- the checksum covers command, payload length, and payload;
+- multiple complete protocol frames can be concatenated into one ATT write.
+
+The capture started after service discovery, so it does not establish the
+service UUID, characteristic UUID, or characteristic properties beyond the
+observed write-without-response and notification behavior.
+
+| Observed bytes | Suspected meaning | Confirmation experiment | Result |
+|---|---|---|---|
+| SEND `1A`, RECV `1B` with identifiers and trailing numeric fields | device/printer information query | repeat without printing and compare stable versus media-dependent fields | open |
+| SEND `01`, RECV `02` | print-job initialization | vary copies and label dimensions one field at a time | open |
+| SEND `13`, RECV `14` | session or print-job configuration | compare fresh app sessions and offline operation | open |
+| SEND `83`, followed by `85` bitmap-like payloads | page/bitmap metadata and raster rows | print white, black-line, and single-dot fixtures | open |
+| SEND `84` around `83`/`85` data, RECV `D3` | raster range boundary or data commit | vary image height and inspect indexes and response timing | open |
+| repeated SEND `A3`, RECV `B3` with changing payload | print status/progress query | poll while idle, printing, out of paper, and cover open | open |
+| SEND `E3`, RECV `E4` after raster transfer | end/commit print data | omit only in a controlled probe run and observe behavior | open |
+| SEND `F3`, RECV `F4` after terminal status | finalize completed print job | compare successful, cancelled, and failed jobs | open |
+| SEND `19 02 01 01`, RECV generic `00 01 01` | leave print mode or session cleanup | compare app disconnect and consecutive-print traces | open |
+
 ## Verified Facts
 
 Move a fact here only after it is reproduced at least three times on Android and
 three times on iOS with the physical D11H.
 
 No facts have been verified yet.
-

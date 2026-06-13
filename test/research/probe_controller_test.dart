@@ -53,6 +53,14 @@ void main() {
       BleCharacteristicProperty.writeWithoutResponse,
     },
   );
+  final capturedPrintCharacteristic = BleCharacteristic(
+    serviceUuid: 'fff0',
+    characteristicUuid: 'fff5',
+    properties: const <BleCharacteristicProperty>{
+      BleCharacteristicProperty.writeWithoutResponse,
+      BleCharacteristicProperty.notify,
+    },
+  );
   final service = BleService(
     serviceUuid: 'fff0',
     characteristics: <BleCharacteristic>[
@@ -60,6 +68,7 @@ void main() {
       secondNotifyCharacteristic,
       writeCharacteristic,
       writeWithoutResponseCharacteristic,
+      capturedPrintCharacteristic,
     ],
   );
 
@@ -644,6 +653,51 @@ void main() {
       );
 
       expect(transport.writes, hasLength(2));
+    });
+
+    test('replays the captured test print after subscribing', () async {
+      transport.writeResponder = (write) {
+        final command = splitD11hFrames(write.bytes).first[2];
+        final response = switch (command) {
+          0x2C => '55 55 00 01 01 00 AA AA',
+          0x23 => '55 55 33 01 01 33 AA AA',
+          0x21 => '55 55 31 01 01 31 AA AA',
+          0x01 => '55 55 02 01 01 02 AA AA',
+          0x13 => '55 55 14 02 01 00 17 AA AA',
+          0x84 => '55 55 D3 03 01 02 01 D2 AA AA',
+          0xA3 => '55 55 B3 08 00 01 64 64 15 16 00 00 B9 AA AA',
+          0xE3 => '55 55 E4 01 01 E4 AA AA',
+          0xF3 => '55 55 F4 01 01 F4 AA AA',
+          0x19 => '55 55 00 01 01 00 AA AA',
+          _ => throw StateError('Unexpected command $command'),
+        };
+        scheduleMicrotask(
+          () => transport.emitNotification(
+            deviceId,
+            capturedPrintCharacteristic,
+            parseHexBytes(response),
+          ),
+        );
+      };
+
+      await controller.printCapturedTestLabel(
+        capturedPrintCharacteristic,
+        interWriteDelay: Duration.zero,
+        statusPollDelay: Duration.zero,
+      );
+
+      expect(transport.subscribeCallCount, 1);
+      expect(transport.writes, hasLength(13));
+      expect(
+        transport.writes.map((write) => write.mode),
+        everyElement(BleWriteMode.withoutResponse),
+      );
+      expect(
+        transport.writes.map(
+          (write) => splitD11hFrames(write.bytes).map((frame) => frame[2]),
+        ),
+        anyElement(orderedEquals(<int>[0x84, 0x83, 0x85, 0x85, 0x84])),
+      );
     });
 
     test('sanitized log excludes device ids and manufacturer bytes', () async {
