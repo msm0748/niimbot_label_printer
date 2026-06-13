@@ -3,10 +3,13 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:niimbot_lib/niimbot.dart';
 import 'package:niimbot_lib/niimbot_research.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 typedef PermissionRequester = Future<bool> Function();
+typedef LabelRasterRenderer =
+    Future<MonochromeRaster> Function(LabelDocument document);
 typedef PermissionBatchRequester =
     Future<Map<Permission, PermissionStatus>> Function(
       List<Permission> permissions,
@@ -40,11 +43,15 @@ class ProbePage extends StatefulWidget {
     required this.controller,
     this.requestPermissions = _requestDefaultProbePermissions,
     this.scanDuration = const Duration(seconds: 10),
+    this.rasterInterWriteDelay = const Duration(milliseconds: 10),
+    this.renderLabel = _renderDefaultLabel,
   });
 
   final ProbeController controller;
   final PermissionRequester requestPermissions;
   final Duration scanDuration;
+  final Duration rasterInterWriteDelay;
+  final LabelRasterRenderer renderLabel;
 
   @override
   State<ProbePage> createState() => _ProbePageState();
@@ -52,13 +59,26 @@ class ProbePage extends StatefulWidget {
 
 Future<bool> _requestDefaultProbePermissions() => requestProbePermissions();
 
+Future<MonochromeRaster> _renderDefaultLabel(LabelDocument document) =>
+    const TextLabelRenderer().render(document);
+
 class _ProbePageState extends State<ProbePage> {
   StreamSubscription<ProbeEvent>? _events;
+  final _labelText = TextEditingController(text: 'Hello');
+  final _customWidth = TextEditingController(text: '22');
+  final _customHeight = TextEditingController(text: '12');
   var _busy = false;
+  var _labelSizePreset = '12x22';
+  var _labelOrientation = LabelOrientation.normal;
+  var _labelAlignment = LabelTextAlignment.center;
+  var _labelFontSize = 18.0;
+  var _labelWrap = true;
+  Future<MonochromeRaster>? _previewFuture;
 
   @override
   void initState() {
     super.initState();
+    _previewFuture = _renderTextLabel();
     _events = widget.controller.eventStream.listen((_) {
       if (mounted) {
         setState(() {});
@@ -70,6 +90,9 @@ class _ProbePageState extends State<ProbePage> {
   void dispose() {
     unawaited(_events?.cancel());
     unawaited(widget.controller.dispose());
+    _labelText.dispose();
+    _customWidth.dispose();
+    _customHeight.dispose();
     super.dispose();
   }
 
@@ -157,6 +180,74 @@ class _ProbePageState extends State<ProbePage> {
         setState(() => _busy = false);
       }
     }
+  }
+
+  Future<void> _printTextLabel(BleCharacteristic characteristic) async {
+    if (_labelText.text.trim().isEmpty) {
+      _showMessage('Enter text to print.');
+      return;
+    }
+
+    setState(() => _busy = true);
+    try {
+      final raster = await _renderTextLabel();
+      await widget.controller.printRaster(
+        characteristic,
+        raster,
+        interWriteDelay: widget.rasterInterWriteDelay,
+      );
+      _showMessage('Printer confirmed text label.');
+    } catch (error) {
+      _showMessage('Text label print failed: $error');
+    } finally {
+      if (mounted) {
+        setState(() => _busy = false);
+      }
+    }
+  }
+
+  LabelSize _selectedLabelSize() {
+    return switch (_labelSizePreset) {
+      '12x22' => LabelSize.d11h12x22,
+      '12x30' => LabelSize.d11h12x30,
+      'custom' => LabelSize(
+        widthMm: double.parse(_customWidth.text),
+        heightMm: double.parse(_customHeight.text),
+      ),
+      _ => throw StateError('Unknown label size preset.'),
+    };
+  }
+
+  LabelDocument _buildTextDocument() {
+    final size = _selectedLabelSize();
+    const paddingMm = 1.0;
+    return LabelDocument(
+      size: size,
+      orientation: _labelOrientation,
+      elements: <LabelElement>[
+        LabelText(
+          text: _labelText.text,
+          xMm: paddingMm,
+          yMm: paddingMm,
+          widthMm: size.widthMm - paddingMm * 2,
+          heightMm: size.heightMm - paddingMm * 2,
+          fontSizePt: _labelFontSize,
+          alignment: _labelAlignment,
+          wrap: _labelWrap,
+          bold: true,
+        ),
+      ],
+    );
+  }
+
+  Future<MonochromeRaster> _renderTextLabel() =>
+      Future<LabelDocument>.sync(_buildTextDocument).then(widget.renderLabel);
+
+  void _refreshPreview() {
+    final preview = _renderTextLabel();
+    setState(() {
+      _previewFuture = preview;
+    });
   }
 
   void _showMessage(String message) {
@@ -253,6 +344,8 @@ class _ProbePageState extends State<ProbePage> {
                   ),
                 ),
               ),
+            const SizedBox(height: 16),
+            _buildLabelEditor(connected ? capturedPrintCharacteristic : null),
             if (widget.controller.services.isNotEmpty) ...<Widget>[
               const SizedBox(height: 16),
               Text(
@@ -280,6 +373,220 @@ class _ProbePageState extends State<ProbePage> {
                     : widget.controller.exportSanitizedLog(),
                 style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLabelEditor(BleCharacteristic? printCharacteristic) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Text('Text label', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 12),
+            TextField(
+              key: const Key('label-text-input'),
+              controller: _labelText,
+              minLines: 1,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Text',
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (_) => _refreshPreview(),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: <Widget>[
+                SizedBox(
+                  width: 220,
+                  child: DropdownButtonFormField<String>(
+                    key: const Key('label-size-select'),
+                    initialValue: _labelSizePreset,
+                    decoration: const InputDecoration(
+                      labelText: 'Label size',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: const <DropdownMenuItem<String>>[
+                      DropdownMenuItem(
+                        value: '12x22',
+                        child: Text('12 x 22 mm'),
+                      ),
+                      DropdownMenuItem(
+                        value: '12x30',
+                        child: Text('12 x 30 mm'),
+                      ),
+                      DropdownMenuItem(value: 'custom', child: Text('Custom')),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        _labelSizePreset = value;
+                        _refreshPreview();
+                      }
+                    },
+                  ),
+                ),
+                SizedBox(
+                  width: 220,
+                  child: DropdownButtonFormField<LabelOrientation>(
+                    initialValue: _labelOrientation,
+                    decoration: const InputDecoration(
+                      labelText: 'Orientation',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: const <DropdownMenuItem<LabelOrientation>>[
+                      DropdownMenuItem(
+                        value: LabelOrientation.normal,
+                        child: Text('Horizontal'),
+                      ),
+                      DropdownMenuItem(
+                        value: LabelOrientation.rotated90,
+                        child: Text('Vertical'),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        _labelOrientation = value;
+                        _refreshPreview();
+                      }
+                    },
+                  ),
+                ),
+                SizedBox(
+                  width: 220,
+                  child: DropdownButtonFormField<LabelTextAlignment>(
+                    initialValue: _labelAlignment,
+                    decoration: const InputDecoration(
+                      labelText: 'Alignment',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: const <DropdownMenuItem<LabelTextAlignment>>[
+                      DropdownMenuItem(
+                        value: LabelTextAlignment.start,
+                        child: Text('Start'),
+                      ),
+                      DropdownMenuItem(
+                        value: LabelTextAlignment.center,
+                        child: Text('Center'),
+                      ),
+                      DropdownMenuItem(
+                        value: LabelTextAlignment.end,
+                        child: Text('End'),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        _labelAlignment = value;
+                        _refreshPreview();
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
+            if (_labelSizePreset == 'custom') ...<Widget>[
+              const SizedBox(height: 12),
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: TextField(
+                      controller: _customWidth,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Width (mm)',
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: (_) => _refreshPreview(),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: _customHeight,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Height (mm)',
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: (_) => _refreshPreview(),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            const SizedBox(height: 8),
+            Text('Font size ${_labelFontSize.round()} pt'),
+            Slider(
+              value: _labelFontSize,
+              min: 6,
+              max: 32,
+              divisions: 26,
+              label: '${_labelFontSize.round()} pt',
+              onChanged: (value) {
+                _labelFontSize = value;
+                _refreshPreview();
+              },
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Wrap text'),
+              value: _labelWrap,
+              onChanged: (value) {
+                _labelWrap = value;
+                _refreshPreview();
+              },
+            ),
+            const SizedBox(height: 8),
+            FutureBuilder<MonochromeRaster>(
+              future: _previewFuture,
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return Text(
+                    'Preview error: ${snapshot.error}',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  );
+                }
+                final raster = snapshot.data;
+                if (raster == null) {
+                  return const Center(child: Text('Rendering preview...'));
+                }
+                return Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 420),
+                    child: AspectRatio(
+                      aspectRatio: raster.width / raster.height,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                            color: Theme.of(context).colorScheme.outline,
+                          ),
+                        ),
+                        child: CustomPaint(
+                          key: const Key('label-preview'),
+                          painter: _RasterPreviewPainter(raster),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: _busy || printCharacteristic == null
+                  ? null
+                  : () => _printTextLabel(printCharacteristic),
+              icon: const Icon(Icons.text_fields),
+              label: const Text('Print text label'),
             ),
           ],
         ),
@@ -463,4 +770,37 @@ class _StatusCard extends StatelessWidget {
 String displayDeviceId(BleDeviceId id) {
   final value = id.value;
   return value.length <= 6 ? value : '...${value.substring(value.length - 6)}';
+}
+
+final class _RasterPreviewPainter extends CustomPainter {
+  const _RasterPreviewPainter(this.raster);
+
+  final MonochromeRaster raster;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawRect(Offset.zero & size, Paint()..color = Colors.white);
+    final pixelWidth = size.width / raster.width;
+    final pixelHeight = size.height / raster.height;
+    final black = Paint()..color = Colors.black;
+    for (var y = 0; y < raster.height; y++) {
+      for (var x = 0; x < raster.width; x++) {
+        if (raster.isBlack(x, y)) {
+          canvas.drawRect(
+            Rect.fromLTWH(
+              x * pixelWidth,
+              y * pixelHeight,
+              pixelWidth,
+              pixelHeight,
+            ),
+            black,
+          );
+        }
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_RasterPreviewPainter oldDelegate) =>
+      oldDelegate.raster != raster;
 }
