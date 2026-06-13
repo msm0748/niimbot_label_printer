@@ -7,27 +7,38 @@ import 'package:niimbot_lib/niimbot_research.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 typedef PermissionRequester = Future<bool> Function();
+typedef PermissionBatchRequester =
+    Future<Map<Permission, PermissionStatus>> Function(
+      List<Permission> permissions,
+    );
 
-Future<bool> requestProbePermissions() async {
-  final permissions = <Permission>[
-    if (Platform.isAndroid) ...<Permission>[
-      Permission.bluetoothScan,
-      Permission.bluetoothConnect,
-    ],
-    if (Platform.isIOS) Permission.bluetooth,
-  ];
-  if (permissions.isEmpty) {
+Future<bool> requestProbePermissions({
+  bool? isAndroid,
+  PermissionBatchRequester? requestPermissions,
+}) async {
+  if (!(isAndroid ?? Platform.isAndroid)) {
     return true;
   }
-  final statuses = await permissions.request();
+
+  final permissions = <Permission>[
+    Permission.bluetoothScan,
+    Permission.bluetoothConnect,
+  ];
+  final statuses = await (requestPermissions ?? _requestPermissionBatch)(
+    permissions,
+  );
   return statuses.values.every((status) => status.isGranted);
 }
+
+Future<Map<Permission, PermissionStatus>> _requestPermissionBatch(
+  List<Permission> permissions,
+) => permissions.request();
 
 class ProbePage extends StatefulWidget {
   const ProbePage({
     super.key,
     required this.controller,
-    this.requestPermissions = requestProbePermissions,
+    this.requestPermissions = _requestDefaultProbePermissions,
     this.scanDuration = const Duration(seconds: 10),
   });
 
@@ -38,6 +49,8 @@ class ProbePage extends StatefulWidget {
   @override
   State<ProbePage> createState() => _ProbePageState();
 }
+
+Future<bool> _requestDefaultProbePermissions() => requestProbePermissions();
 
 class _ProbePageState extends State<ProbePage> {
   StreamSubscription<ProbeEvent>? _events;
