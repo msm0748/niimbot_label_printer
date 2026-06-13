@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:niimbot_lib/niimbot.dart';
+import 'package:niimbot_lib/niimbot_research.dart';
 
-void main() {
-  runApp(const D11hProbeApp());
-}
+import 'probe_page.dart';
+
+void main() => runApp(const D11hProbeApp());
 
 class D11hProbeApp extends StatelessWidget {
   const D11hProbeApp({super.key});
@@ -11,11 +11,12 @@ class D11hProbeApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      debugShowCheckedModeBanner: false,
       title: 'NIIMBOT D11H Probe',
-      home: Scaffold(
-        appBar: AppBar(title: const Text('NIIMBOT D11H Probe')),
-        body: Center(child: Text('BLE readiness: ${BleReadiness.ready.name}')),
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
       ),
+      home: ProbePage(controller: ProbeController(ReactiveBleTransport())),
     );
   }
 }
