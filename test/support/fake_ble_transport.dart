@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_niimbot/niimbot.dart';
-import 'package:flutter_niimbot/src/ble/ble_transport.dart';
 
 final class FakeBleWrite {
   FakeBleWrite({
@@ -49,6 +48,7 @@ final class FakeBleTransport implements BleTransport {
   int negotiatedMtu;
   final List<FakeBleWrite> writes = [];
   void Function(FakeBleWrite write)? writeResponder;
+  Completer<void>? writeCompleter;
   Object? discoverServicesError;
   Completer<List<BleService>>? discoverServicesCompleter;
   Completer<int>? requestMtuCompleter;
@@ -183,6 +183,7 @@ final class FakeBleTransport implements BleTransport {
       mode: mode,
     );
     writes.add(write);
+    await writeCompleter?.future;
     writeResponder?.call(write);
   }
 

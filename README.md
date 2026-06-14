@@ -7,9 +7,8 @@ NIIMBOT Bluetooth printers.
 >
 > Support for other NIIMBOT models is not available yet.
 
-This package is under active development. The label model and renderer are
-available through the public API, while the D11H printing workflow is still
-experimental.
+This package is under active development. The label model, renderer, and D11H
+application facade are available through the stable public entry point.
 
 ## Features
 
@@ -18,13 +17,13 @@ experimental.
 - Use normal or 90-degree rotated label orientation
 - Configure text alignment, position, wrapping, size, and weight
 - Work with typed BLE device, connection, service, and failure models
-- Experiment with D11H BLE printing through the included probe application
+- Scan, connect, reconnect, and print through the D11H application facade
 
 ## Supported printers
 
 | Manufacturer | Model | Status |
 | --- | --- | --- |
-| NIIMBOT | D11H | Experimental |
+| NIIMBOT | D11H | Supported |
 
 No other NIIMBOT printer model is currently supported or tested.
 
@@ -76,8 +75,28 @@ final raster = await const TextLabelRenderer().render(document);
 print('${raster.width} x ${raster.height}');
 ```
 
-The resulting `MonochromeRaster` contains one-bit pixel data suitable for the
-D11H raster-printing pipeline.
+Print the document through the high-level facade:
+
+```dart
+final printer = D11hPrinter();
+
+try {
+  final devices = await printer.scan();
+  if (devices.isEmpty) {
+    throw StateError('No BLE printers found.');
+  }
+
+  await printer.connect(devices.first.deviceId);
+  await printer.printLabel(document);
+  await printer.disconnect();
+} finally {
+  await printer.dispose();
+}
+```
+
+`printLabel()` serializes concurrent requests, reconnects to the last selected
+device when needed, renders the document, discovers the D11H FFF0/FFF1
+characteristic, and runs the raster print protocol.
 
 ## Bluetooth setup
 
@@ -85,22 +104,23 @@ Applications using BLE functionality must configure the Android and iOS
 Bluetooth permissions required by `flutter_reactive_ble`. Permission prompts
 remain the responsibility of the application.
 
-The repository includes an internal D11H probe application under
-`tool/d11h_probe`. It demonstrates scanning, connecting, rendering, and
-experimental printing with a physical D11H.
+The repository also includes an internal D11H probe application under
+`tool/d11h_probe` for protocol research and diagnostics.
 
 ## API status
 
 Use `package:flutter_niimbot/niimbot.dart` for the public API.
 
-`package:flutter_niimbot/niimbot_research.dart` exposes experimental transport
-and D11H research APIs. These APIs may change without notice and are not
+`D11hPrinter`, D11H characteristic discovery, label models, rendering, and BLE
+transport types are exported by the stable entry point.
+
+`package:flutter_niimbot/niimbot_research.dart` exposes low-level probe and
+protocol research APIs. These APIs may change without notice and are not
 covered by semantic-versioning guarantees.
 
 ## Limitations
 
 - Only NIIMBOT D11H has been characterized and tested.
-- Printing APIs are experimental and may change.
 - Text labels are supported; image, barcode, and QR-code elements are not yet
   part of the public renderer.
 - A successful BLE write alone does not guarantee that a physical label was
