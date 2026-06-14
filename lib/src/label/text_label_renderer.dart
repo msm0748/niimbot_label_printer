@@ -28,7 +28,7 @@ final class TextLabelRenderer {
 
     for (final element in document.elements) {
       if (element case final LabelText text) {
-        _paintText(canvas, text);
+        _paintText(canvas, text, document.orientation);
       }
     }
 
@@ -52,7 +52,11 @@ final class TextLabelRenderer {
     return _rotateClockwise(normalPixels, normalWidth, normalHeight);
   }
 
-  void _paintText(ui.Canvas canvas, LabelText text) {
+  void _paintText(
+    ui.Canvas canvas,
+    LabelText text,
+    LabelOrientation orientation,
+  ) {
     final left = text.xMm * LabelDocument.dotsPerMillimeter;
     final top = text.yMm * LabelDocument.dotsPerMillimeter;
     final width = text.widthMm * LabelDocument.dotsPerMillimeter;
@@ -74,14 +78,30 @@ final class TextLabelRenderer {
         LabelTextAlignment.center => TextAlign.center,
         LabelTextAlignment.end => TextAlign.end,
       },
+      textWidthBasis: TextWidthBasis.longestLine,
       maxLines: text.wrap ? null : 1,
       ellipsis: text.wrap ? null : '...',
     )..layout(maxWidth: width);
 
     canvas.save();
     canvas.clipRect(bounds);
-    final y = top + math.max(0, (height - painter.height) / 2);
-    painter.paint(canvas, ui.Offset(left, y));
+    final horizontalSpace = math.max(0, width - painter.width);
+    final verticalSpace = math.max(0, height - painter.height);
+    final x = orientation == LabelOrientation.normal
+        ? switch (text.horizontalPosition) {
+            LabelHorizontalPosition.left => left,
+            LabelHorizontalPosition.center => left + horizontalSpace / 2,
+            LabelHorizontalPosition.right => left + horizontalSpace,
+          }
+        : left + horizontalSpace / 2;
+    final y = orientation == LabelOrientation.normal
+        ? top + verticalSpace / 2
+        : switch (text.horizontalPosition) {
+            LabelHorizontalPosition.left => top + verticalSpace,
+            LabelHorizontalPosition.center => top + verticalSpace / 2,
+            LabelHorizontalPosition.right => top,
+          };
+    painter.paint(canvas, ui.Offset(x, y));
     canvas.restore();
     painter.dispose();
   }
