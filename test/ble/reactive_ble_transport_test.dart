@@ -87,7 +87,7 @@ void main() {
     );
   });
 
-  test('connects with prescan and timeout and maps updates', () async {
+  test('connects directly with service hints and maps updates', () async {
     final updates = <BleConnectionUpdate>[];
     final subscription = transport
         .connect(deviceId, timeout: const Duration(seconds: 7))
@@ -104,8 +104,15 @@ void main() {
     await pumpEventQueue();
 
     expect(backend.connectionId, 'device-1');
-    expect(backend.connectionServices, isEmpty);
-    expect(backend.prescanDuration, const Duration(seconds: 3));
+    expect(
+      backend.connectionServicesWithCharacteristics,
+      isNotNull,
+    );
+    expect(
+      backend.connectionServicesWithCharacteristics!.keys.single.toString(),
+      '0000fff0-0000-1000-8000-00805f9b34fb',
+    );
+    expect(backend.prescanDuration, isNull);
     expect(backend.connectionTimeout, const Duration(seconds: 7));
     expect(updates.single.deviceId, deviceId);
     expect(updates.single.status, BleConnectionStatus.connected);
@@ -601,6 +608,7 @@ final class FakeReactiveBleBackend implements ReactiveBleBackend {
   ScanMode? scanMode;
   String? connectionId;
   List<Uuid>? connectionServices;
+  Map<Uuid, List<Uuid>>? connectionServicesWithCharacteristics;
   Duration? prescanDuration;
   Duration? connectionTimeout;
   int statusCancelCount = 0;
@@ -671,6 +679,31 @@ final class FakeReactiveBleBackend implements ReactiveBleBackend {
     connectionId = id;
     connectionServices = withServices;
     this.prescanDuration = prescanDuration;
+    this.connectionTimeout = connectionTimeout;
+    return controller.stream;
+  }
+
+  @override
+  Stream<ConnectionStateUpdate> connectToDevice({
+    required String id,
+    Map<Uuid, List<Uuid>>? servicesWithCharacteristicsToDiscover,
+    required Duration connectionTimeout,
+  }) {
+    connectionCreateCount++;
+    final controller = StreamController<ConnectionStateUpdate>();
+    controller.onCancel = () {
+      connectionCancelCount++;
+      final error = connectionCancelError;
+      if (error != null) {
+        connectionCancelError = null;
+        return Future<void>.error(error);
+      }
+      return connectionCancelCompleter?.future;
+    };
+    _connectionController = controller;
+    connectionId = id;
+    connectionServicesWithCharacteristics =
+        servicesWithCharacteristicsToDiscover;
     this.connectionTimeout = connectionTimeout;
     return controller.stream;
   }

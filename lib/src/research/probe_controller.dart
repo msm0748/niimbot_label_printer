@@ -406,10 +406,6 @@ final class ProbeController {
     } else {
       completer.complete();
     }
-
-    if (error == null && cleanupFailure != null) {
-      Error.throwWithStackTrace(cleanupFailure, cleanupStackTrace!);
-    }
   }
 
   Future<void> connect(

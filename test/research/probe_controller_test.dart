@@ -960,7 +960,7 @@ void main() {
 
       await expectLater(
         controller.stopScan().timeout(const Duration(milliseconds: 100)),
-        throwsA(isA<TimeoutException>()),
+        completes,
       );
       await expectLater(scan, throwsA(isA<TimeoutException>()));
       watch.stop();
@@ -987,7 +987,7 @@ void main() {
 
       await expectLater(
         controller.stopScan().timeout(const Duration(milliseconds: 100)),
-        throwsA(isA<TimeoutException>()),
+        completes,
       );
       await expectLater(scan, throwsA(isA<TimeoutException>()));
       watch.stop();

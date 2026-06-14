@@ -25,6 +25,12 @@ abstract interface class ReactiveBleBackend {
     required Duration connectionTimeout,
   });
 
+  Stream<ConnectionStateUpdate> connectToDevice({
+    required String id,
+    Map<Uuid, List<Uuid>>? servicesWithCharacteristicsToDiscover,
+    required Duration connectionTimeout,
+  });
+
   Future<List<DiscoveredService>> discoverServices(String deviceId);
 
   Stream<List<int>> subscribeToCharacteristic(
@@ -71,6 +77,17 @@ final class FlutterReactiveBleBackend implements ReactiveBleBackend {
   );
 
   @override
+  Stream<ConnectionStateUpdate> connectToDevice({
+    required String id,
+    Map<Uuid, List<Uuid>>? servicesWithCharacteristicsToDiscover,
+    required Duration connectionTimeout,
+  }) => _backend.connectToDevice(
+    id: id,
+    servicesWithCharacteristicsToDiscover: servicesWithCharacteristicsToDiscover,
+    connectionTimeout: connectionTimeout,
+  );
+
+  @override
   Future<List<DiscoveredService>> discoverServices(String deviceId) {
     // The 5.5.0 facade still exposes the property-rich legacy model directly.
     // ignore: deprecated_member_use
@@ -100,6 +117,13 @@ final class FlutterReactiveBleBackend implements ReactiveBleBackend {
 }
 
 final class ReactiveBleTransport implements BleTransport {
+  static final Uuid _d11hServiceUuid = Uuid.parse(
+    '0000fff0-0000-1000-8000-00805f9b34fb',
+  );
+  static final Uuid _d11hCharacteristicUuid = Uuid.parse(
+    '0000fff1-0000-1000-8000-00805f9b34fb',
+  );
+
   ReactiveBleTransport({
     FlutterReactiveBle? backend,
     ReactiveBleBackend? backendOverride,
@@ -193,10 +217,11 @@ final class ReactiveBleTransport implements BleTransport {
           deviceId,
           () => _ConnectionSession(
             deviceId: deviceId,
-            source: () => _backend.connectToAdvertisingDevice(
+            source: () => _backend.connectToDevice(
               id: deviceId.value,
-              withServices: const <Uuid>[],
-              prescanDuration: const Duration(seconds: 3),
+              servicesWithCharacteristicsToDiscover: {
+                _d11hServiceUuid: [_d11hCharacteristicUuid],
+              },
               connectionTimeout: timeout,
             ),
             onClosed: () => _connections.remove(deviceId),

@@ -55,10 +55,7 @@ final class D11hPrinter {
       );
     }
 
-    if (_controller.connectedDevice != deviceId) {
-      await _controller.disconnect();
-      await _controller.connect(deviceId);
-    }
+    await _ensureReadyForPrint(deviceId);
 
     final raster = await const TextLabelRenderer().render(document);
     final characteristic = findD11hPrintCharacteristic(_controller.services);
@@ -70,6 +67,19 @@ final class D11hPrinter {
     }
     await _controller.printRaster(characteristic, raster);
   });
+
+  Future<void> _ensureReadyForPrint(BleDeviceId deviceId) async {
+    final hasPrintCharacteristic = findD11hPrintCharacteristic(
+      _controller.services,
+    );
+    if (_controller.connectedDevice == deviceId && hasPrintCharacteristic != null) {
+      return;
+    }
+    if (_controller.connectedDevice != null) {
+      await _controller.disconnect();
+    }
+    await _controller.connect(deviceId);
+  }
 
   Future<void> dispose() {
     final active = _disposeFuture;

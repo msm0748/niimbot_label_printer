@@ -1,3 +1,11 @@
+## 0.1.0-dev.3
+
+* Connect with `connectToDevice` instead of prescan-based advertising connect to
+  reduce repeated BLE churn and connection chimes.
+* Restore the print session only when the D11H FFF0/FFF1 characteristic is
+  missing before printing.
+* Stop scan-cleanup failures from overriding a successful scan result.
+
 ## 0.1.0-dev.2
 
 * Add strict D11H FFF0/FFF1 print characteristic discovery.

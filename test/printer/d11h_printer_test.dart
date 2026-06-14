@@ -183,7 +183,16 @@ void main() {
     addTearDown(printer.dispose);
     await _completeConnection(printer.connect(_deviceId), transport);
 
-    await expectLater(printer.printLabel(_document), throwsStateError);
+    final print = printer.printLabel(_document);
+    await _waitFor(() => transport.connectCallCount == 2);
+    transport.emitConnectionUpdate(
+      const BleConnectionUpdate(
+        deviceId: _deviceId,
+        status: BleConnectionStatus.connected,
+      ),
+    );
+
+    await expectLater(print, throwsStateError);
 
     expect(transport.writes, isEmpty);
   });
