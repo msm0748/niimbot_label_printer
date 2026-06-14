@@ -1,3 +1,9 @@
+## 0.1.0-dev.5
+
+* Add `beginPrintSession()` / `endPrintSession()` for one reconnect per print batch.
+* Refresh the GATT session before printing instead of reusing a stale connection.
+* Use 30ms raster inter-write delay to match the working D11H probe app on iOS.
+
 ## 0.1.0-dev.4
 
 * End `D11hPrinter.scan()` with `stopScan()` before the transport scan timeout.

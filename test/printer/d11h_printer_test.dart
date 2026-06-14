@@ -230,6 +230,17 @@ void main() {
     addTearDown(printer.dispose);
     await _completeConnection(printer.connect(_deviceId), transport);
     _respondToPrintWrites(transport);
+    final sessionStartCount = transport.connectCallCount;
+    final session = printer.beginPrintSession();
+    await _waitFor(() => transport.connectCallCount > sessionStartCount);
+    transport.emitConnectionUpdate(
+      const BleConnectionUpdate(
+        deviceId: _deviceId,
+        status: BleConnectionStatus.connected,
+      ),
+    );
+    await session;
+
     final firstWrite = Completer<void>();
     transport.writeCompleter = firstWrite;
 
@@ -258,6 +269,16 @@ void main() {
 
     await expectLater(printer.printLabel(_document), throwsStateError);
     await _completeConnection(printer.connect(_deviceId), transport);
+    final sessionStartCount = transport.connectCallCount;
+    final session = printer.beginPrintSession();
+    await _waitFor(() => transport.connectCallCount > sessionStartCount);
+    transport.emitConnectionUpdate(
+      const BleConnectionUpdate(
+        deviceId: _deviceId,
+        status: BleConnectionStatus.connected,
+      ),
+    );
+    await session;
     await printer.printLabel(_document);
 
     expect(transport.writes, isNotEmpty);

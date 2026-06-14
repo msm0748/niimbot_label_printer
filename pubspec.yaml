@@ -1,6 +1,6 @@
 name: flutter_niimbot
 description: An unofficial Flutter package for rendering and printing labels with NIIMBOT Bluetooth label printers. Currently supports D11H only.
-version: 0.1.0-dev.4
+version: 0.1.0-dev.5
 repository: https://github.com/msm0748/niimbot_label_printer
 issue_tracker: https://github.com/msm0748/niimbot_label_printer/issues
 topics:
