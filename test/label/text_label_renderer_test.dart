@@ -90,7 +90,7 @@ void main() {
     expect(center.left, lessThan(right.left));
   });
 
-  test('keeps physical horizontal positions after rotation', () async {
+  test('places rotated text along the printer label horizontal axis', () async {
     Future<MonochromeRaster> render(LabelHorizontalPosition position) {
       return const TextLabelRenderer().render(
         LabelDocument(
@@ -112,19 +112,36 @@ void main() {
       );
     }
 
-    final left = _blackHorizontalBounds(
+    final left = _blackVerticalBounds(
       await render(LabelHorizontalPosition.left),
     );
-    final center = _blackHorizontalBounds(
+    final center = _blackVerticalBounds(
       await render(LabelHorizontalPosition.center),
     );
-    final right = _blackHorizontalBounds(
+    final right = _blackVerticalBounds(
       await render(LabelHorizontalPosition.right),
     );
 
-    expect(left.left, lessThan(center.left));
-    expect(center.left, lessThan(right.left));
+    expect(left.top, lessThan(center.top));
+    expect(center.top, lessThan(right.top));
   });
+}
+
+({int top, int bottom}) _blackVerticalBounds(MonochromeRaster raster) {
+  var top = raster.height;
+  var bottom = -1;
+  for (var y = 0; y < raster.height; y++) {
+    for (var x = 0; x < raster.width; x++) {
+      if (raster.isBlack(x, y)) {
+        top = y < top ? y : top;
+        bottom = y > bottom ? y : bottom;
+      }
+    }
+  }
+  if (bottom < 0) {
+    throw StateError('Raster contains no black pixels.');
+  }
+  return (top: top, bottom: bottom);
 }
 
 ({int left, int right}) _blackHorizontalBounds(MonochromeRaster raster) {

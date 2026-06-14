@@ -22,10 +22,10 @@ The renderer first lays out text using the existing bounds, wrapping, and line
 alignment behavior. It then positions the resulting text block along the
 physical label's horizontal axis.
 
-For normal orientation, left, center, and right map directly to the label's
-horizontal axis. For rotated orientation, the renderer accounts for the final
-clockwise rotation so the same values still refer to the physical printed
-label's left, center, and right edges.
+Left, center, and right are applied along the source label's long horizontal
+axis before raster rotation. The D11H consumes the rotated raster with that
+source axis corresponding to the printed label's physical left-to-right
+direction, even though it appears as the raster's vertical axis after rotation.
 
 Vertical centering and clipping remain unchanged. The configured text bounds
 and one-millimeter probe-app padding remain the placement limits.
