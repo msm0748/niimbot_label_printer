@@ -33,7 +33,7 @@ Add `flutter_niimbot` to your app:
 
 ```yaml
 dependencies:
-  flutter_niimbot: ^0.1.0-dev.1
+  flutter_niimbot: ^0.1.0-dev.2
 ```
 
 Then fetch the dependency:

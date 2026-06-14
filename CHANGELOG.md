@@ -1,9 +1,10 @@
-## Unreleased
+## 0.1.0-dev.2
 
 * Add strict D11H FFF0/FFF1 print characteristic discovery.
 * Add the stable `D11hPrinter` facade for scanning, connection lifecycle,
   reconnect-before-print, label rendering, and serialized printing.
 * Export printer and BLE transport APIs from `niimbot.dart`.
+* Disconnect an active printer before starting a new scan.
 
 ## 0.1.0-dev.1
 
