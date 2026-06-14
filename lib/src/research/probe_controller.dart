@@ -971,6 +971,7 @@ final class ProbeController {
       await subscribe(characteristic);
       final deviceId = _connectedDevice!;
       final setup = <(Uint8List, int)>[
+        (buildD11hCommand(0x2C, const <int>[1]), 0x00),
         (buildD11hCommand(0x23, <int>[labelType]), 0x33),
         (buildD11hCommand(0x21, <int>[density]), 0x31),
         (buildD11hCommand(0x01, const <int>[1]), 0x02),

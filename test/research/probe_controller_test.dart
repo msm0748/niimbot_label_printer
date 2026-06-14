@@ -729,6 +729,7 @@ void main() {
         transport.writeResponder = (write) {
           final command = splitD11hFrames(write.bytes).first[2];
           final response = switch (command) {
+            0x2C => '55 55 00 01 01 00 AA AA',
             0x23 => '55 55 33 01 01 33 AA AA',
             0x21 => '55 55 31 01 01 31 AA AA',
             0x01 => '55 55 02 01 01 02 AA AA',
@@ -759,7 +760,13 @@ void main() {
           statusPollDelay: Duration.zero,
         );
 
-        expect(transport.writes, hasLength(11));
+        expect(transport.writes, hasLength(12));
+        expect(
+          transport.writes
+              .map((write) => splitD11hFrames(write.bytes).single[2])
+              .take(7),
+          <int>[0x2C, 0x23, 0x21, 0x01, 0x03, 0x13, 0x15],
+        );
         expect(
           transport.writes
               .map((write) => splitD11hFrames(write.bytes).single[2])
