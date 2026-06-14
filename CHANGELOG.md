@@ -1,3 +1,9 @@
+## 0.1.0-dev.4
+
+* End `D11hPrinter.scan()` with `stopScan()` before the transport scan timeout.
+* Wait for `BleReadiness.ready` before starting a scan.
+* Expose `bluetoothReadiness` on `D11hPrinter`.
+
 ## 0.1.0-dev.3
 
 * Connect with `connectToDevice` instead of prescan-based advertising connect to
