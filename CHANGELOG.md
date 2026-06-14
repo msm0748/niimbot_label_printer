@@ -1,3 +1,25 @@
+## 0.1.0-dev.9
+
+* Align print characteristic discovery with d11h_probe (notify + writeWithoutResponse fallback).
+* Do not require characteristic.serviceUuid to repeat FFF0 on iOS discovery results.
+* Refresh GATT services when connected but the print channel is missing.
+
+## 0.1.0-dev.8
+
+* Add `printRenderedLabel()` for probe-style warm printing without reconnect.
+* Subscribe to FFF1 notifications after connect and settle before printing.
+* Remove pre-print disconnect/reconnect from `printLabel`.
+
+## 0.1.0-dev.7
+
+* Handle unexpected BLE link loss while connected so `isConnected` stays accurate.
+
+## 0.1.0-dev.6
+
+* Remove `beginPrintSession()` / `endPrintSession()` and pre-print GATT refresh.
+* Print on a warm BLE connection when already connected with the D11H FFF1 characteristic.
+* Reconnect only when disconnected or the print characteristic is missing.
+
 ## 0.1.0-dev.5
 
 * Add `beginPrintSession()` / `endPrintSession()` for one reconnect per print batch.

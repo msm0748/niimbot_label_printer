@@ -513,6 +513,20 @@ final class ProbeController {
     int generation,
     _MonotonicDeadline deadline,
   ) {
+    if (_lifecycle == _ProbeLifecycle.connected &&
+        _connectedDevice == update.deviceId) {
+      switch (update.status) {
+        case BleConnectionStatus.disconnected:
+          _record(ProbeEventKind.connection, 'link lost');
+          unawaited(_handleLinkLoss(update.deviceId));
+          return;
+        case BleConnectionStatus.connected:
+        case BleConnectionStatus.connecting:
+        case BleConnectionStatus.disconnecting:
+          return;
+      }
+    }
+
     if (!_isCurrentConnection(generation, update.deviceId)) {
       return;
     }
@@ -1140,6 +1154,38 @@ final class ProbeController {
 
   String exportSanitizedLog() =>
       _events.map((event) => event.toLogLine()).join('\n');
+
+  Future<void> _handleLinkLoss(BleDeviceId deviceId) async {
+    if (_connectedDevice != deviceId) {
+      return;
+    }
+
+    _clearPublicConnectionState();
+
+    final subscriptions = _notificationSubscriptions.values.toList();
+    _notificationSubscriptions.clear();
+    for (final subscription in subscriptions) {
+      try {
+        await subscription.cancel();
+      } catch (error) {
+        _recordError('link loss cleanup failed', error);
+      }
+    }
+
+    final connectionSubscription = _connectionSubscription;
+    _connectionSubscription = null;
+    try {
+      await connectionSubscription?.cancel();
+    } catch (error) {
+      _recordError('link loss cleanup failed', error);
+    }
+
+    _connectionDevice = null;
+    _connectionSetupStarted = false;
+    if (_lifecycle == _ProbeLifecycle.connected) {
+      _lifecycle = _ProbeLifecycle.idle;
+    }
+  }
 
   Future<void> disconnect() {
     if (_lifecycle == _ProbeLifecycle.disposed) {

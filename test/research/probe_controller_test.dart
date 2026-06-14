@@ -238,6 +238,38 @@ void main() {
       );
     });
 
+    test('clears connection state when the link drops while connected', () async {
+      final transport = FakeBleTransport(
+        services: <BleService>[service],
+        negotiatedMtu: 185,
+      );
+      final controller = ProbeController(transport);
+      addTearDown(controller.dispose);
+
+      final connectFuture = controller.connect(deviceId);
+      transport.emitConnectionUpdate(
+        const BleConnectionUpdate(
+          deviceId: deviceId,
+          status: BleConnectionStatus.connected,
+        ),
+      );
+      await connectFuture;
+
+      expect(controller.connectedDevice, deviceId);
+
+      transport.emitConnectionUpdate(
+        const BleConnectionUpdate(
+          deviceId: deviceId,
+          status: BleConnectionStatus.disconnected,
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(controller.connectedDevice, isNull);
+      expect(controller.services, isEmpty);
+      expect(controller.mtu, isNull);
+    });
+
     test('fails without hanging when discovery throws', () async {
       final transport = FakeBleTransport()
         ..discoverServicesError = StateError('discovery failed');

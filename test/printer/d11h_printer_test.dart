@@ -167,6 +167,23 @@ void main() {
     expect(transport.disconnectCallCount, 1);
   });
 
+  test('printLabel keeps warm connection without disconnect', () async {
+    final transport = FakeBleTransport(services: <BleService>[_printService]);
+    final printer = D11hPrinter.withTransport(transport);
+    addTearDown(printer.dispose);
+    _respondToPrintWrites(transport);
+
+    await _completeConnection(printer.connect(_deviceId), transport);
+    final connectAfterInitial = transport.connectCallCount;
+    final disconnectBeforePrint = transport.disconnectCallCount;
+
+    await printer.printLabel(_document);
+
+    expect(transport.connectCallCount, connectAfterInitial);
+    expect(transport.disconnectCallCount, disconnectBeforePrint);
+    expect(transport.writes, isNotEmpty);
+  });
+
   test('printLabel reconnects to the remembered device', () async {
     final transport = FakeBleTransport(services: <BleService>[_printService]);
     final printer = D11hPrinter.withTransport(transport);
@@ -176,15 +193,10 @@ void main() {
     await _completeConnection(printer.connect(_deviceId), transport);
     await printer.disconnect();
 
-    final print = printer.printLabel(_document);
-    await _waitFor(() => transport.connectCallCount == 2);
-    transport.emitConnectionUpdate(
-      const BleConnectionUpdate(
-        deviceId: _deviceId,
-        status: BleConnectionStatus.connected,
-      ),
-    );
-    await print;
+    await expectLater(printer.printLabel(_document), throwsStateError);
+
+    await _completeConnection(printer.connect(_deviceId), transport);
+    await printer.printLabel(_document);
 
     expect(transport.writes, isNotEmpty);
     expect(
@@ -210,17 +222,9 @@ void main() {
     addTearDown(printer.dispose);
     await _completeConnection(printer.connect(_deviceId), transport);
 
-    final print = printer.printLabel(_document);
-    await _waitFor(() => transport.connectCallCount == 2);
-    transport.emitConnectionUpdate(
-      const BleConnectionUpdate(
-        deviceId: _deviceId,
-        status: BleConnectionStatus.connected,
-      ),
-    );
+    await expectLater(printer.printLabel(_document), throwsStateError);
 
-    await expectLater(print, throwsStateError);
-
+    expect(transport.connectCallCount, 1);
     expect(transport.writes, isEmpty);
   });
 
@@ -230,16 +234,6 @@ void main() {
     addTearDown(printer.dispose);
     await _completeConnection(printer.connect(_deviceId), transport);
     _respondToPrintWrites(transport);
-    final sessionStartCount = transport.connectCallCount;
-    final session = printer.beginPrintSession();
-    await _waitFor(() => transport.connectCallCount > sessionStartCount);
-    transport.emitConnectionUpdate(
-      const BleConnectionUpdate(
-        deviceId: _deviceId,
-        status: BleConnectionStatus.connected,
-      ),
-    );
-    await session;
 
     final firstWrite = Completer<void>();
     transport.writeCompleter = firstWrite;
@@ -269,16 +263,6 @@ void main() {
 
     await expectLater(printer.printLabel(_document), throwsStateError);
     await _completeConnection(printer.connect(_deviceId), transport);
-    final sessionStartCount = transport.connectCallCount;
-    final session = printer.beginPrintSession();
-    await _waitFor(() => transport.connectCallCount > sessionStartCount);
-    transport.emitConnectionUpdate(
-      const BleConnectionUpdate(
-        deviceId: _deviceId,
-        status: BleConnectionStatus.connected,
-      ),
-    );
-    await session;
     await printer.printLabel(_document);
 
     expect(transport.writes, isNotEmpty);

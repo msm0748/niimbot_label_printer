@@ -4,6 +4,7 @@ import '../ble/ble_models.dart';
 import '../ble/ble_transport.dart';
 import '../ble/reactive_ble_transport.dart';
 import '../label/label_models.dart';
+import '../label/monochrome_raster.dart';
 import '../label/text_label_renderer.dart';
 import '../research/probe_controller.dart';
 import 'd11h_print_characteristic.dart';
@@ -20,16 +21,20 @@ final class D11hPrinter {
   BleDeviceId? _lastDevice;
   Future<void>? _disposeFuture;
   var _disposeRequested = false;
-  var _printSessionActive = false;
+
+  static const _postConnectSettleDelay = Duration(milliseconds: 300);
+  static const _rasterInterWriteDelay = Duration(milliseconds: 30);
 
   bool get isConnected => _controller.connectedDevice != null;
+
+  /// The device id passed to the most recent [connect] call.
+  BleDeviceId? get lastDeviceId => _lastDevice;
 
   BleReadiness get bluetoothReadiness => _controller.readiness;
 
   Future<List<BleAdvertisement>> scan({
     Duration timeout = const Duration(seconds: 10),
   }) => _enqueue(() async {
-    _printSessionActive = false;
     await _waitForBluetoothReady();
     if (_controller.connectedDevice != null) {
       await _controller.disconnect();
@@ -62,52 +67,38 @@ final class D11hPrinter {
     _lastDevice = id;
     final connectedDevice = _controller.connectedDevice;
     if (connectedDevice == id) {
+      if (findD11hPrintCharacteristic(_controller.services) == null) {
+        await _controller.disconnect();
+        await _controller.connect(id);
+        await Future<void>.delayed(_postConnectSettleDelay);
+      }
+      await _warmPrintChannel();
       return;
     }
     if (connectedDevice != null) {
       await _controller.disconnect();
     }
     await _controller.connect(id);
+    await Future<void>.delayed(_postConnectSettleDelay);
+    await _warmPrintChannel();
   });
 
-  Future<void> disconnect() => _enqueue(() async {
-    _printSessionActive = false;
-    await _controller.disconnect();
-  });
+  Future<void> disconnect() => _enqueue(_controller.disconnect);
 
-  /// Refreshes the GATT session once before a print batch.
-  Future<void> beginPrintSession() => _enqueue(() async {
-    final deviceId = _lastDevice;
-    if (deviceId == null) {
-      throw StateError(
-        'Cannot print a label before selecting a device with connect().',
-      );
-    }
-    _printSessionActive = false;
-    await _refreshConnection(deviceId);
-    _printSessionActive = true;
-  });
-
-  void endPrintSession() {
-    _printSessionActive = false;
+  Future<void> printLabel(LabelDocument document) async {
+    final raster = await const TextLabelRenderer().render(document);
+    await printRenderedLabel(raster);
   }
 
-  Future<void> printLabel(LabelDocument document) => _enqueue(() async {
-    final deviceId = _lastDevice;
-    if (deviceId == null) {
+  /// Prints a pre-rendered raster on the current connection, matching the
+  /// d11h_probe path: no reconnect, no GATT refresh.
+  Future<void> printRenderedLabel(MonochromeRaster raster) => _enqueue(() async {
+    if (_controller.connectedDevice == null) {
       throw StateError(
-        'Cannot print a label before selecting a device with connect().',
+        'Cannot print a label before connecting with connect().',
       );
     }
 
-    if (!_printSessionActive) {
-      await _refreshConnection(deviceId);
-      _printSessionActive = true;
-    } else {
-      await _ensurePrintCharacteristicReady(deviceId);
-    }
-
-    final raster = await const TextLabelRenderer().render(document);
     final characteristic = findD11hPrintCharacteristic(_controller.services);
     if (characteristic == null) {
       throw StateError(
@@ -118,25 +109,16 @@ final class D11hPrinter {
     await _controller.printRaster(
       characteristic,
       raster,
-      interWriteDelay: const Duration(milliseconds: 30),
+      interWriteDelay: _rasterInterWriteDelay,
     );
   });
 
-  Future<void> _refreshConnection(BleDeviceId deviceId) async {
-    if (_controller.connectedDevice != null) {
-      await _controller.disconnect();
-    }
-    await _controller.connect(deviceId);
-  }
-
-  Future<void> _ensurePrintCharacteristicReady(BleDeviceId deviceId) async {
-    final hasPrintCharacteristic = findD11hPrintCharacteristic(
-      _controller.services,
-    );
-    if (_controller.connectedDevice == deviceId && hasPrintCharacteristic != null) {
+  Future<void> _warmPrintChannel() async {
+    final characteristic = findD11hPrintCharacteristic(_controller.services);
+    if (characteristic == null) {
       return;
     }
-    await _refreshConnection(deviceId);
+    await _controller.subscribe(characteristic);
   }
 
   Future<void> dispose() {

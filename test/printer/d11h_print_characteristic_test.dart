@@ -52,8 +52,48 @@ void main() {
     );
   });
 
-  test('rejects the right characteristic under the wrong service', () {
-    final candidate = characteristic(serviceUuid: 'aaa0');
+  test('finds FFF1 under FFF0 even when characteristic serviceUuid differs', () {
+    final expected = characteristic(
+      serviceUuid: '0000fff0-0000-1000-8000-00805f9b34fb',
+      characteristicUuid: 'fff1',
+    );
+
+    expect(
+      findD11hPrintCharacteristic(<BleService>[
+        BleService(
+          serviceUuid: '0000fff0-0000-1000-8000-00805f9b34fb',
+          characteristics: <BleCharacteristic>[expected],
+        ),
+      ]),
+      same(expected),
+    );
+  });
+
+  test('falls back to any notify plus writeWithoutResponse characteristic', () {
+    final expected = characteristic(
+      serviceUuid: 'e7810a71-0000-1000-8000-00805f9b34fb',
+      characteristicUuid: '0000fff1-0000-1000-8000-00805f9b34fb',
+    );
+
+    expect(
+      findD11hPrintCharacteristic(<BleService>[
+        BleService(
+          serviceUuid: 'e7810a71-0000-1000-8000-00805f9b34fb',
+          characteristics: <BleCharacteristic>[expected],
+        ),
+      ]),
+      same(expected),
+    );
+  });
+
+  test('rejects notify-only characteristics without writeWithoutResponse', () {
+    final candidate = characteristic(
+      serviceUuid: 'aaa0',
+      characteristicUuid: 'aaa1',
+      properties: const <BleCharacteristicProperty>{
+        BleCharacteristicProperty.notify,
+      },
+    );
 
     expect(
       findD11hPrintCharacteristic(<BleService>[
@@ -63,12 +103,12 @@ void main() {
     );
   });
 
-  test('rejects another characteristic with compatible properties', () {
+  test('falls back to a compatible non-FFF1 characteristic', () {
     final candidate = characteristic(characteristicUuid: 'fff2');
 
     expect(
       findD11hPrintCharacteristic(<BleService>[service(candidate)]),
-      isNull,
+      same(candidate),
     );
   });
 

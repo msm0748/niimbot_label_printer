@@ -17,7 +17,9 @@ application facade are available through the stable public entry point.
 - Use normal or 90-degree rotated label orientation
 - Configure text alignment, position, wrapping, size, and weight
 - Work with typed BLE device, connection, service, and failure models
-- Scan, connect, reconnect, and print through the D11H application facade
+- Scan, connect, and print through the D11H application facade
+- Warm-connection printing on iOS (no pre-print GATT refresh)
+- Probe-aligned print characteristic discovery for real devices
 
 ## Supported printers
 
@@ -33,7 +35,7 @@ Add `flutter_niimbot` to your app:
 
 ```yaml
 dependencies:
-  flutter_niimbot: ^0.1.0-dev.2
+  flutter_niimbot: ^0.1.0-dev.9
 ```
 
 Then fetch the dependency:
@@ -54,28 +56,28 @@ Create and render a text label:
 
 ```dart
 final document = LabelDocument(
-  size: LabelSize.d11h12x30,
+  size: LabelSize.d11h12x22,
+  orientation: LabelOrientation.rotated90,
   elements: [
     LabelText(
-      text: 'Hello, NIIMBOT!',
-      xMm: 1,
+      text: '상품명\n닉네임',
+      xMm: 0,
       yMm: 1,
-      widthMm: 28,
+      widthMm: 22,
       heightMm: 10,
-      fontSizePt: 14,
-      alignment: LabelTextAlignment.center,
+      fontSizePt: 15,
+      alignment: LabelTextAlignment.start,
       horizontalPosition: LabelHorizontalPosition.center,
+      wrap: true,
       bold: true,
     ),
   ],
 );
 
 final raster = await const TextLabelRenderer().render(document);
-
-print('${raster.width} x ${raster.height}');
 ```
 
-Print the document through the high-level facade:
+Print through the high-level facade:
 
 ```dart
 final printer = D11hPrinter();
@@ -88,15 +90,30 @@ try {
 
   await printer.connect(devices.first.deviceId);
   await printer.printLabel(document);
-  await printer.disconnect();
+  // Or render first, then print on the warm connection:
+  // await printer.printRenderedLabel(raster);
 } finally {
   await printer.dispose();
 }
 ```
 
-`printLabel()` serializes concurrent requests, reconnects to the last selected
-device when needed, renders the document, discovers the D11H FFF0/FFF1
-characteristic, and runs the raster print protocol.
+### Printing behavior
+
+- `connect()` discovers services, negotiates MTU, subscribes to the print
+  characteristic, and settles briefly before the link is used.
+- `printLabel()` and `printRenderedLabel()` print on the **current** BLE
+  connection. They do not disconnect and reconnect before each label.
+- `printRenderedLabel()` matches the working `tool/d11h_probe` path: render
+  first, then call `printRaster` with a 30 ms inter-write delay.
+- All printer operations are serialized through an internal queue.
+- `scan()` disconnects an active printer before discovery and ends with an
+  explicit `stopScan()` so iOS scan results are not lost to timeout cleanup.
+
+### Print characteristic discovery
+
+`findD11hPrintCharacteristic()` prefers FFF0/FFF1, then falls back to any
+characteristic that supports notify and `writeWithoutResponse`, matching the
+probe app's discovery logic on iOS.
 
 ## Bluetooth setup
 
@@ -104,7 +121,10 @@ Applications using BLE functionality must configure the Android and iOS
 Bluetooth permissions required by `flutter_reactive_ble`. Permission prompts
 remain the responsibility of the application.
 
-The repository also includes an internal D11H probe application under
+On iOS, avoid requesting Bluetooth permission through `permission_handler`
+before scanning; let Core Bluetooth handle the system prompt.
+
+The repository includes an internal D11H probe application under
 `tool/d11h_probe` for protocol research and diagnostics.
 
 ## API status
