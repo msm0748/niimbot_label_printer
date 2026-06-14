@@ -6,6 +6,8 @@ enum LabelOrientation { normal, rotated90 }
 
 enum LabelTextAlignment { start, center, end }
 
+enum LabelHorizontalPosition { left, center, right }
+
 final class LabelSize {
   const LabelSize._({required this.widthMm, required this.heightMm});
 
@@ -35,6 +37,7 @@ final class LabelText extends LabelElement {
     required this.heightMm,
     required this.fontSizePt,
     required this.alignment,
+    required this.horizontalPosition,
     required this.wrap,
     required this.bold,
   });
@@ -47,6 +50,7 @@ final class LabelText extends LabelElement {
     required double heightMm,
     double fontSizePt = 18,
     LabelTextAlignment alignment = LabelTextAlignment.center,
+    LabelHorizontalPosition horizontalPosition = LabelHorizontalPosition.center,
     bool wrap = true,
     bool bold = false,
   }) {
@@ -73,6 +77,7 @@ final class LabelText extends LabelElement {
       heightMm: heightMm,
       fontSizePt: fontSizePt,
       alignment: alignment,
+      horizontalPosition: horizontalPosition,
       wrap: wrap,
       bold: bold,
     );
@@ -85,6 +90,7 @@ final class LabelText extends LabelElement {
   final double heightMm;
   final double fontSizePt;
   final LabelTextAlignment alignment;
+  final LabelHorizontalPosition horizontalPosition;
   final bool wrap;
   final bool bold;
 }

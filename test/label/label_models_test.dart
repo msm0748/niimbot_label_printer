@@ -43,8 +43,20 @@ void main() {
 
     expect(text.text, 'Hello');
     expect(text.alignment, LabelTextAlignment.center);
+    expect(text.horizontalPosition, LabelHorizontalPosition.center);
     expect(text.wrap, isTrue);
     expect(text.bold, isTrue);
+
+    final right = LabelText(
+      text: 'Right',
+      xMm: 1,
+      yMm: 1,
+      widthMm: 20,
+      heightMm: 10,
+      horizontalPosition: LabelHorizontalPosition.right,
+    );
+
+    expect(right.horizontalPosition, LabelHorizontalPosition.right);
   });
 
   test('rejects invalid label and text dimensions', () {

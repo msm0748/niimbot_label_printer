@@ -927,6 +927,7 @@ final class ProbeController {
     int labelType = 1,
     int quantity = 1,
     Duration interWriteDelay = const Duration(milliseconds: 10),
+    Duration pageOpenDelay = const Duration(milliseconds: 30),
     Duration statusPollDelay = const Duration(milliseconds: 100),
     Duration responseTimeout = const Duration(seconds: 2),
     int maxStatusPolls = 50,
@@ -971,20 +972,23 @@ final class ProbeController {
       await subscribe(characteristic);
       final deviceId = _connectedDevice!;
       final setup = <(Uint8List, int)>[
+        (buildD11hCommand(0x2C, const <int>[1]), 0x00),
         (buildD11hCommand(0x23, <int>[labelType]), 0x33),
         (buildD11hCommand(0x21, <int>[density]), 0x31),
-        (buildD11hCommand(0x01, const <int>[1]), 0x02),
-        (buildD11hCommand(0x03, const <int>[1]), 0x04),
         (
-          buildD11hCommand(0x13, <int>[
-            raster.height >> 8,
-            raster.height & 0xFF,
-            raster.width >> 8,
-            raster.width & 0xFF,
+          buildD11hCommand(0x01, <int>[
+            quantity >> 8,
+            quantity & 0xFF,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
           ]),
-          0x14,
+          0x02,
         ),
-        (buildD11hCommand(0x15, <int>[quantity >> 8, quantity & 0xFF]), 0x16),
       ];
       for (final (command, expectedResponse) in setup) {
         await _writeAndWaitForCommand(
@@ -995,6 +999,37 @@ final class ProbeController {
           responseTimeout,
         );
       }
+
+      await _writeWithoutResponse(
+        deviceId,
+        characteristic,
+        buildD11hCommand(0xA3, const <int>[1]),
+      );
+      if (pageOpenDelay > Duration.zero) {
+        await Future<void>.delayed(pageOpenDelay);
+      }
+
+      await _writeAndWaitForCommand(
+        deviceId,
+        characteristic,
+        buildD11hCommand(0x13, <int>[
+          raster.height >> 8,
+          raster.height & 0xFF,
+          raster.width >> 8,
+          raster.width & 0xFF,
+          quantity >> 8,
+          quantity & 0xFF,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+        ]),
+        0x14,
+        responseTimeout,
+      );
 
       for (final row in rows) {
         await _writeWithoutResponse(deviceId, characteristic, row);

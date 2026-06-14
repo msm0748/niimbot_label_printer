@@ -43,7 +43,7 @@ class ProbePage extends StatefulWidget {
     required this.controller,
     this.requestPermissions = _requestDefaultProbePermissions,
     this.scanDuration = const Duration(seconds: 10),
-    this.rasterInterWriteDelay = const Duration(milliseconds: 10),
+    this.rasterInterWriteDelay = const Duration(milliseconds: 30),
     this.renderLabel = _renderDefaultLabel,
   });
 
@@ -71,6 +71,7 @@ class _ProbePageState extends State<ProbePage> {
   var _labelSizePreset = '12x22';
   var _labelOrientation = LabelOrientation.normal;
   var _labelAlignment = LabelTextAlignment.center;
+  var _labelHorizontalPosition = LabelHorizontalPosition.center;
   var _labelFontSize = 18.0;
   var _labelWrap = true;
   Future<MonochromeRaster>? _previewFuture;
@@ -220,19 +221,20 @@ class _ProbePageState extends State<ProbePage> {
 
   LabelDocument _buildTextDocument() {
     final size = _selectedLabelSize();
-    const paddingMm = 1.0;
+    const verticalPaddingMm = 1.0;
     return LabelDocument(
       size: size,
       orientation: _labelOrientation,
       elements: <LabelElement>[
         LabelText(
           text: _labelText.text,
-          xMm: paddingMm,
-          yMm: paddingMm,
-          widthMm: size.widthMm - paddingMm * 2,
-          heightMm: size.heightMm - paddingMm * 2,
+          xMm: 0,
+          yMm: verticalPaddingMm,
+          widthMm: size.widthMm,
+          heightMm: size.heightMm - verticalPaddingMm * 2,
           fontSizePt: _labelFontSize,
           alignment: _labelAlignment,
+          horizontalPosition: _labelHorizontalPosition,
           wrap: _labelWrap,
           bold: true,
         ),
@@ -484,6 +486,37 @@ class _ProbePageState extends State<ProbePage> {
                     onChanged: (value) {
                       if (value != null) {
                         _labelAlignment = value;
+                        _refreshPreview();
+                      }
+                    },
+                  ),
+                ),
+                SizedBox(
+                  width: 220,
+                  child: DropdownButtonFormField<LabelHorizontalPosition>(
+                    key: const Key('label-position-select'),
+                    initialValue: _labelHorizontalPosition,
+                    decoration: const InputDecoration(
+                      labelText: 'Label position',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: const <DropdownMenuItem<LabelHorizontalPosition>>[
+                      DropdownMenuItem(
+                        value: LabelHorizontalPosition.left,
+                        child: Text('Left'),
+                      ),
+                      DropdownMenuItem(
+                        value: LabelHorizontalPosition.center,
+                        child: Text('Center'),
+                      ),
+                      DropdownMenuItem(
+                        value: LabelHorizontalPosition.right,
+                        child: Text('Right'),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        _labelHorizontalPosition = value;
                         _refreshPreview();
                       }
                     },

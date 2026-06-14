@@ -20,18 +20,36 @@ List<Uint8List> encodeD11hRasterRows(MonochromeRaster raster) {
   }
 
   final rowByteCount = (raster.width + 7) ~/ 8;
-  return List<Uint8List>.unmodifiable(<Uint8List>[
-    for (var y = 0; y < raster.height; y++)
-      buildD11hCommand(0x85, <int>[
-        y >> 8,
-        y & 0xFF,
-        0,
-        0,
-        0,
-        1,
-        ..._packRow(raster, y, rowByteCount),
-      ]),
-  ]);
+  final rows = <Uint8List>[];
+  var y = 0;
+  while (y < raster.height) {
+    final packed = _packRow(raster, y, rowByteCount);
+    var runLength = 1;
+    while (y + runLength < raster.height && runLength < 200) {
+      final next = _packRow(raster, y + runLength, rowByteCount);
+      if (!_rowsEqual(packed, next)) {
+        break;
+      }
+      runLength++;
+    }
+
+    final blackPixelCount = _blackPixelCount(packed);
+    rows.add(
+      blackPixelCount == 0
+          ? buildD11hCommand(0x84, <int>[y >> 8, y & 0xFF, runLength])
+          : buildD11hCommand(0x85, <int>[
+              y >> 8,
+              y & 0xFF,
+              0,
+              blackPixelCount & 0xFF,
+              blackPixelCount >> 8,
+              runLength,
+              ...packed,
+            ]),
+    );
+    y += runLength;
+  }
+  return List<Uint8List>.unmodifiable(rows);
 }
 
 Uint8List _packRow(MonochromeRaster raster, int y, int rowByteCount) {
@@ -42,4 +60,25 @@ Uint8List _packRow(MonochromeRaster raster, int y, int rowByteCount) {
     }
   }
   return bytes;
+}
+
+bool _rowsEqual(Uint8List first, Uint8List second) {
+  for (var index = 0; index < first.length; index++) {
+    if (first[index] != second[index]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+int _blackPixelCount(Uint8List bytes) {
+  var count = 0;
+  for (final byte in bytes) {
+    var value = byte;
+    while (value != 0) {
+      count += value & 1;
+      value >>= 1;
+    }
+  }
+  return count;
 }

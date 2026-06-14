@@ -8,6 +8,16 @@ import 'package:niimbot_lib/niimbot.dart';
 import 'package:niimbot_lib/niimbot_research.dart';
 
 void main() {
+  test('uses conservative raster pacing by default', () {
+    final controller = ProbeController(_ProbeTestTransport());
+    final page = ProbePage(
+      controller: controller,
+      requestPermissions: () async => true,
+    );
+
+    expect(page.rasterInterWriteDelay, const Duration(milliseconds: 30));
+  });
+
   testWidgets('shows scan action and empty-state guidance', (tester) async {
     final controller = ProbeController(_ProbeTestTransport());
 
@@ -144,6 +154,15 @@ void main() {
     );
     sizeDropdown.onChanged?.call('12x30');
     await tester.pumpAndSettle();
+    final positionDropdown = tester
+        .widget<DropdownButton<LabelHorizontalPosition>>(
+          find.descendant(
+            of: find.byKey(const Key('label-position-select')),
+            matching: find.byType(DropdownButton<LabelHorizontalPosition>),
+          ),
+        );
+    positionDropdown.onChanged?.call(LabelHorizontalPosition.right);
+    await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
       find.text('Print text label'),
       300,
@@ -157,7 +176,7 @@ void main() {
     await tester.tap(find.text('Print text label'));
     for (
       var attempt = 0;
-      attempt < 200 && transport.rasterRowWriteCount < 96;
+      attempt < 200 && transport.rasterDataWriteCount < 1;
       attempt++
     ) {
       await tester.pump(const Duration(milliseconds: 10));
@@ -166,7 +185,13 @@ void main() {
 
     expect(renderedDocument?.size.widthMm, 30);
     expect(renderedDocument?.size.heightMm, 12);
-    expect(transport.rasterRowWriteCount, 96);
+    final text = renderedDocument!.elements.single as LabelText;
+    expect(text.horizontalPosition, LabelHorizontalPosition.right);
+    expect(text.xMm, 0);
+    expect(text.widthMm, 30);
+    expect(text.yMm, 1);
+    expect(text.heightMm, 10);
+    expect(transport.rasterDataWriteCount, 1);
     final message = tester.widget<Text>(
       find.descendant(of: find.byType(SnackBar), matching: find.byType(Text)),
     );
@@ -181,7 +206,7 @@ final class _ProbeTestTransport implements BleTransport {
   );
   final _notifications = StreamController<Uint8List>.broadcast(sync: true);
   int writeCount = 0;
-  int rasterRowWriteCount = 0;
+  int rasterDataWriteCount = 0;
 
   @override
   BleReadiness get currentReadiness => BleReadiness.ready;
@@ -285,8 +310,8 @@ final class _ProbeTestTransport implements BleTransport {
       0x85 => null,
       _ => throw StateError('Unexpected command $command'),
     };
-    if (command == 0x85) {
-      rasterRowWriteCount++;
+    if (command == 0x84 || command == 0x85) {
+      rasterDataWriteCount++;
     }
     if (response != null) {
       scheduleMicrotask(() => _notifications.add(parseHexBytes(response)));
