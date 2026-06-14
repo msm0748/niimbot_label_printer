@@ -760,27 +760,25 @@ void main() {
           statusPollDelay: Duration.zero,
         );
 
-        expect(transport.writes, hasLength(12));
-        expect(
-          transport.writes
-              .map((write) => splitD11hFrames(write.bytes).single[2])
-              .take(7),
-          <int>[0x2C, 0x23, 0x21, 0x01, 0x03, 0x13, 0x15],
-        );
+        expect(transport.writes, hasLength(13));
+        final commands = transport.writes
+            .map((write) => splitD11hFrames(write.bytes).single[2])
+            .toList();
+        expect(commands.take(8), <int>[
+          0x2C,
+          0x23,
+          0x21,
+          0x01,
+          0x03,
+          0x13,
+          0x15,
+          0xA3,
+        ]);
+        expect(commands.indexOf(0xA3), lessThan(commands.indexOf(0x85)));
         final initialization = splitD11hFrames(
           transport.writes[3].bytes,
         ).single;
-        expect(initialization.sublist(4, initialization.length - 3), <int>[
-          0,
-          1,
-          0,
-          0,
-          0,
-          0,
-          0,
-          1,
-          0,
-        ]);
+        expect(initialization.sublist(4, initialization.length - 3), <int>[1]);
         expect(
           transport.writes
               .map((write) => splitD11hFrames(write.bytes).single[2])
