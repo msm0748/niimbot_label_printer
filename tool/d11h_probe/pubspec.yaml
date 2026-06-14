@@ -9,7 +9,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  niimbot_lib:
+  flutter_niimbot:
     path: ../..
   permission_handler: 12.0.3
 

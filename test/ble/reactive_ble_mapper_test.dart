@@ -1,7 +1,7 @@
 import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:niimbot_lib/src/ble/ble_models.dart';
-import 'package:niimbot_lib/src/ble/reactive_ble_mapper.dart';
+import 'package:flutter_niimbot/src/ble/ble_models.dart';
+import 'package:flutter_niimbot/src/ble/reactive_ble_mapper.dart';
 
 void main() {
   test('maps every backend BLE status to domain readiness', () {

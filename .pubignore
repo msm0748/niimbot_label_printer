@@ -1,0 +1,7 @@
+.dart_tool/
+.idea/
+.superpowers/
+*.iml
+build/
+docs/
+tool/

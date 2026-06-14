@@ -1,8 +1,8 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:niimbot_lib/niimbot.dart';
-import 'package:niimbot_lib/niimbot_research.dart';
+import 'package:flutter_niimbot/niimbot.dart';
+import 'package:flutter_niimbot/niimbot_research.dart';
 
 void main() {
   test('encodes bitmap rows with black-pixel counts', () {

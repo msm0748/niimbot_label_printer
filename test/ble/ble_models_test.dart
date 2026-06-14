@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:niimbot_lib/niimbot.dart';
+import 'package:flutter_niimbot/niimbot.dart';
 
 void main() {
   group('BleDeviceId', () {
