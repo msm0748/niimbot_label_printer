@@ -110,6 +110,22 @@ void main() {
     expect(devices.single.rssi, -40);
   });
 
+  test('scan disconnects an active connection before discovery', () async {
+    final transport = FakeBleTransport(services: <BleService>[_printService]);
+    final printer = D11hPrinter.withTransport(transport);
+    addTearDown(printer.dispose);
+    await _completeConnection(printer.connect(_deviceId), transport);
+
+    final scan = printer.scan();
+    await _waitFor(() => transport.scanCallCount == 1);
+
+    expect(printer.isConnected, isFalse);
+    expect(transport.disconnectCallCount, 1);
+
+    await transport.closeScan();
+    await scan;
+  });
+
   test('connect and disconnect update connection state', () async {
     final transport = FakeBleTransport(services: <BleService>[_printService]);
     final printer = D11hPrinter.withTransport(transport);

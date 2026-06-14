@@ -26,6 +26,9 @@ final class D11hPrinter {
   Future<List<BleAdvertisement>> scan({
     Duration timeout = const Duration(seconds: 10),
   }) => _enqueue(() async {
+    if (_controller.connectedDevice != null) {
+      await _controller.disconnect();
+    }
     await _controller.startScan(timeout: timeout);
     return _controller.devices;
   });
