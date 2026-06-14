@@ -767,6 +767,20 @@ void main() {
               .take(7),
           <int>[0x2C, 0x23, 0x21, 0x01, 0x03, 0x13, 0x15],
         );
+        final initialization = splitD11hFrames(
+          transport.writes[3].bytes,
+        ).single;
+        expect(initialization.sublist(4, initialization.length - 3), <int>[
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+        ]);
         expect(
           transport.writes
               .map((write) => splitD11hFrames(write.bytes).single[2])
