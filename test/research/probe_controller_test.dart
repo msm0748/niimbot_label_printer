@@ -757,28 +757,48 @@ void main() {
           capturedPrintCharacteristic,
           raster,
           interWriteDelay: Duration.zero,
+          pageOpenDelay: Duration.zero,
           statusPollDelay: Duration.zero,
         );
 
-        expect(transport.writes, hasLength(13));
+        expect(transport.writes, hasLength(11));
         final commands = transport.writes
             .map((write) => splitD11hFrames(write.bytes).single[2])
             .toList();
-        expect(commands.take(8), <int>[
-          0x2C,
-          0x23,
-          0x21,
-          0x01,
-          0x03,
-          0x13,
-          0x15,
-          0xA3,
-        ]);
+        expect(commands.take(6), <int>[0x2C, 0x23, 0x21, 0x01, 0xA3, 0x13]);
         expect(commands.indexOf(0xA3), lessThan(commands.indexOf(0x85)));
         final initialization = splitD11hFrames(
           transport.writes[3].bytes,
         ).single;
-        expect(initialization.sublist(4, initialization.length - 3), <int>[1]);
+        expect(initialization.sublist(4, initialization.length - 3), <int>[
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+        ]);
+        final pageSize = splitD11hFrames(transport.writes[5].bytes).single;
+        expect(pageSize.sublist(4, pageSize.length - 3), <int>[
+          0,
+          2,
+          0,
+          8,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+        ]);
+        expect(commands, isNot(contains(0x03)));
+        expect(commands, isNot(contains(0x15)));
         expect(
           transport.writes
               .map((write) => splitD11hFrames(write.bytes).single[2])

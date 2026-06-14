@@ -176,7 +176,7 @@ void main() {
     await tester.tap(find.text('Print text label'));
     for (
       var attempt = 0;
-      attempt < 200 && transport.rasterRowWriteCount < 96;
+      attempt < 200 && transport.rasterDataWriteCount < 1;
       attempt++
     ) {
       await tester.pump(const Duration(milliseconds: 10));
@@ -191,7 +191,7 @@ void main() {
     expect(text.widthMm, 30);
     expect(text.yMm, 1);
     expect(text.heightMm, 10);
-    expect(transport.rasterRowWriteCount, 96);
+    expect(transport.rasterDataWriteCount, 1);
     final message = tester.widget<Text>(
       find.descendant(of: find.byType(SnackBar), matching: find.byType(Text)),
     );
@@ -206,7 +206,7 @@ final class _ProbeTestTransport implements BleTransport {
   );
   final _notifications = StreamController<Uint8List>.broadcast(sync: true);
   int writeCount = 0;
-  int rasterRowWriteCount = 0;
+  int rasterDataWriteCount = 0;
 
   @override
   BleReadiness get currentReadiness => BleReadiness.ready;
@@ -310,8 +310,8 @@ final class _ProbeTestTransport implements BleTransport {
       0x85 => null,
       _ => throw StateError('Unexpected command $command'),
     };
-    if (command == 0x85) {
-      rasterRowWriteCount++;
+    if (command == 0x84 || command == 0x85) {
+      rasterDataWriteCount++;
     }
     if (response != null) {
       scheduleMicrotask(() => _notifications.add(parseHexBytes(response)));
