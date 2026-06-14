@@ -4,7 +4,7 @@
 
 **Goal:** Let callers place a rendered text block at the physical left, center, or right of a label independently from line alignment and label rotation.
 
-**Architecture:** Extend `LabelText` with a public physical-position enum. The renderer measures the laid-out text block and chooses its paint offset along the source label's long horizontal axis, which remains the D11H label's physical left-to-right axis after raster rotation. The probe app exposes the option and passes it through its existing document builder.
+**Architecture:** Extend `LabelText` with a public physical-position enum. The renderer measures the laid-out text block and maps placement to the final label's visible horizontal axis: source x for normal output and source y for clockwise-rotated output. The probe app exposes the option and passes it through its existing document builder.
 
 **Tech Stack:** Dart, Flutter painting APIs, Flutter widget tests
 
@@ -94,31 +94,31 @@ Expected: PASS for normal placement.
 - [ ] **Step 5: Write failing rotated-orientation placement tests**
 
 Render the same short text in `LabelOrientation.rotated90` with left, center,
-and right positions. Assert increasing occupied vertical bounds in the final
-rotated raster because the D11H maps that raster axis to the printed label's
-physical left-to-right direction.
+and right positions. Assert increasing occupied horizontal bounds in the final
+rotated raster and verify right placement reaches within one millimeter of the
+final raster edge.
 
 - [ ] **Step 6: Run the rotated tests and verify they fail**
 
 Run: `flutter test test/label/text_label_renderer_test.dart`
 
-Expected: FAIL if all rotated outputs occupy the same position on the D11H
-label axis.
+Expected: FAIL if all rotated outputs remain horizontally centered.
 
-- [ ] **Step 7: Keep placement on the source label horizontal axis**
+- [ ] **Step 7: Map placement to the final visible horizontal axis**
 
-Use the same source-canvas x offset for normal and rotated output:
+For normal output, calculate the source x offset. For rotated output, center x
+and calculate the source y offset in reverse order because clockwise rotation
+maps lower source y values to the final raster's right side:
 
 ```dart
-final x = switch (text.horizontalPosition) {
-  LabelHorizontalPosition.left => left,
-  LabelHorizontalPosition.center => left + (width - painter.width) / 2,
-  LabelHorizontalPosition.right => left + width - painter.width,
+final y = switch (text.horizontalPosition) {
+  LabelHorizontalPosition.left => top + height - painter.height,
+  LabelHorizontalPosition.center => top + (height - painter.height) / 2,
+  LabelHorizontalPosition.right => top,
 };
 ```
 
-Keep the source-canvas y offset centered and continue using the existing
-clockwise raster rotation and clipping bounds.
+Continue using the existing clockwise raster rotation and clipping bounds.
 
 - [ ] **Step 8: Run renderer tests and verify all pass**
 
