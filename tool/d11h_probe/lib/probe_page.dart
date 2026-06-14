@@ -221,17 +221,17 @@ class _ProbePageState extends State<ProbePage> {
 
   LabelDocument _buildTextDocument() {
     final size = _selectedLabelSize();
-    const paddingMm = 1.0;
+    const verticalPaddingMm = 1.0;
     return LabelDocument(
       size: size,
       orientation: _labelOrientation,
       elements: <LabelElement>[
         LabelText(
           text: _labelText.text,
-          xMm: paddingMm,
-          yMm: paddingMm,
-          widthMm: size.widthMm - paddingMm * 2,
-          heightMm: size.heightMm - paddingMm * 2,
+          xMm: 0,
+          yMm: verticalPaddingMm,
+          widthMm: size.widthMm,
+          heightMm: size.heightMm - verticalPaddingMm * 2,
           fontSizePt: _labelFontSize,
           alignment: _labelAlignment,
           horizontalPosition: _labelHorizontalPosition,

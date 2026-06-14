@@ -177,6 +177,10 @@ void main() {
     expect(renderedDocument?.size.heightMm, 12);
     final text = renderedDocument!.elements.single as LabelText;
     expect(text.horizontalPosition, LabelHorizontalPosition.right);
+    expect(text.xMm, 0);
+    expect(text.widthMm, 30);
+    expect(text.yMm, 1);
+    expect(text.heightMm, 10);
     expect(transport.rasterRowWriteCount, 96);
     final message = tester.widget<Text>(
       find.descendant(of: find.byType(SnackBar), matching: find.byType(Text)),
