@@ -23,15 +23,38 @@ final class D11hPrinter {
 
   bool get isConnected => _controller.connectedDevice != null;
 
+  BleReadiness get bluetoothReadiness => _controller.readiness;
+
   Future<List<BleAdvertisement>> scan({
     Duration timeout = const Duration(seconds: 10),
   }) => _enqueue(() async {
+    await _waitForBluetoothReady();
     if (_controller.connectedDevice != null) {
       await _controller.disconnect();
     }
-    await _controller.startScan(timeout: timeout);
+
+    final timer = Timer(timeout, () {
+      unawaited(_controller.stopScan());
+    });
+    try {
+      await _controller.startScan(timeout: timeout);
+    } finally {
+      timer.cancel();
+    }
     return _controller.devices;
   });
+
+  Future<void> _waitForBluetoothReady({
+    Duration timeout = const Duration(seconds: 8),
+  }) async {
+    final deadline = DateTime.now().add(timeout);
+    while (_controller.readiness != BleReadiness.ready) {
+      if (!DateTime.now().isBefore(deadline)) {
+        throw StateError('Bluetooth를 사용할 수 없습니다.');
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+  }
 
   Future<void> connect(BleDeviceId id) => _enqueue(() async {
     _lastDevice = id;

@@ -110,6 +110,33 @@ void main() {
     expect(devices.single.rssi, -40);
   });
 
+  test(
+    'scan completes with discovered devices without manual closeScan',
+    () async {
+      final transport = FakeBleTransport();
+      final printer = D11hPrinter.withTransport(transport);
+      addTearDown(printer.dispose);
+
+      final scan = printer.scan(timeout: const Duration(milliseconds: 80));
+      await _waitFor(() => transport.scanCallCount == 1);
+      transport.emitAdvertisement(
+        BleAdvertisement(
+          deviceId: _deviceId,
+          name: 'D11_H',
+          rssi: -38,
+          manufacturerData: Uint8List(0),
+          serviceUuids: const <String>['fff0'],
+        ),
+      );
+
+      final devices = await scan;
+
+      expect(devices, hasLength(1));
+      expect(devices.single.name, 'D11_H');
+      expect(transport.stopScanCallCount, greaterThanOrEqualTo(1));
+    },
+  );
+
   test('scan disconnects an active connection before discovery', () async {
     final transport = FakeBleTransport(services: <BleService>[_printService]);
     final printer = D11hPrinter.withTransport(transport);
