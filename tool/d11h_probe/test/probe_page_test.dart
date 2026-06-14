@@ -8,6 +8,16 @@ import 'package:niimbot_lib/niimbot.dart';
 import 'package:niimbot_lib/niimbot_research.dart';
 
 void main() {
+  test('uses conservative raster pacing by default', () {
+    final controller = ProbeController(_ProbeTestTransport());
+    final page = ProbePage(
+      controller: controller,
+      requestPermissions: () async => true,
+    );
+
+    expect(page.rasterInterWriteDelay, const Duration(milliseconds: 30));
+  });
+
   testWidgets('shows scan action and empty-state guidance', (tester) async {
     final controller = ProbeController(_ProbeTestTransport());
 

@@ -43,7 +43,7 @@ class ProbePage extends StatefulWidget {
     required this.controller,
     this.requestPermissions = _requestDefaultProbePermissions,
     this.scanDuration = const Duration(seconds: 10),
-    this.rasterInterWriteDelay = const Duration(milliseconds: 10),
+    this.rasterInterWriteDelay = const Duration(milliseconds: 30),
     this.renderLabel = _renderDefaultLabel,
   });
 
