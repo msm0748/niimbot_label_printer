@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:niimbot_lib/niimbot.dart';
 import 'package:niimbot_lib/niimbot_research.dart';
 
 import '../support/fake_ble_transport.dart';
@@ -699,6 +700,74 @@ void main() {
         anyElement(orderedEquals(<int>[0x84, 0x83, 0x85, 0x85, 0x84])),
       );
     });
+
+    test(
+      'prints an arbitrary monochrome raster with verified responses',
+      () async {
+        final raster = MonochromeRaster(
+          width: 8,
+          height: 2,
+          pixels: Uint8List.fromList(<int>[
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+          ]),
+        );
+        transport.writeResponder = (write) {
+          final command = splitD11hFrames(write.bytes).first[2];
+          final response = switch (command) {
+            0x23 => '55 55 33 01 01 33 AA AA',
+            0x21 => '55 55 31 01 01 31 AA AA',
+            0x01 => '55 55 02 01 01 02 AA AA',
+            0x03 => '55 55 04 01 01 04 AA AA',
+            0x13 => '55 55 14 01 01 14 AA AA',
+            0x15 => '55 55 16 01 01 16 AA AA',
+            0xE3 => '55 55 E4 01 01 E4 AA AA',
+            0xA3 => '55 55 B3 04 00 01 64 64 B6 AA AA',
+            0xF3 => '55 55 F4 01 01 F4 AA AA',
+            0x85 => null,
+            _ => throw StateError('Unexpected command $command'),
+          };
+          if (response != null) {
+            scheduleMicrotask(
+              () => transport.emitNotification(
+                deviceId,
+                capturedPrintCharacteristic,
+                parseHexBytes(response),
+              ),
+            );
+          }
+        };
+
+        await controller.printRaster(
+          capturedPrintCharacteristic,
+          raster,
+          interWriteDelay: Duration.zero,
+          statusPollDelay: Duration.zero,
+        );
+
+        expect(transport.writes, hasLength(11));
+        expect(
+          transport.writes
+              .map((write) => splitD11hFrames(write.bytes).single[2])
+              .where((command) => command == 0x85),
+          hasLength(2),
+        );
+      },
+    );
 
     test('sanitized log excludes device ids and manufacturer bytes', () async {
       await controller.disconnect();

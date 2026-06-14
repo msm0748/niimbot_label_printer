@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:d11h_probe/probe_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:niimbot_lib/niimbot.dart';
 import 'package:niimbot_lib/niimbot_research.dart';
 
 void main() {
@@ -33,6 +34,7 @@ void main() {
           controller: controller,
           requestPermissions: () async => true,
           scanDuration: const Duration(milliseconds: 20),
+          rasterInterWriteDelay: Duration.zero,
         ),
       ),
     );
@@ -50,6 +52,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('MTU 185'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('GATT services'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
     expect(find.textContaining('fff0'), findsWidgets);
   });
 
@@ -63,6 +71,7 @@ void main() {
           controller: controller,
           requestPermissions: () async => true,
           scanDuration: const Duration(milliseconds: 20),
+          rasterInterWriteDelay: Duration.zero,
         ),
       ),
     );
@@ -70,6 +79,7 @@ void main() {
     await tester.tap(find.text('Scan for D11H'));
     await tester.pump();
     transport.emitAdvertisement();
+    await tester.pump();
     await tester.pump(const Duration(milliseconds: 25));
     await tester.pumpAndSettle();
     await tester.tap(find.text('D11_H'));
@@ -85,6 +95,83 @@ void main() {
     expect(transport.writeCount, 13);
     expect(find.text('Printer confirmed print completion.'), findsOneWidget);
   });
+
+  testWidgets('prints user-entered text with selected label options', (
+    tester,
+  ) async {
+    final transport = _ProbeTestTransport();
+    final controller = ProbeController(transport);
+    LabelDocument? renderedDocument;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ProbePage(
+          controller: controller,
+          requestPermissions: () async => true,
+          scanDuration: const Duration(milliseconds: 20),
+          rasterInterWriteDelay: Duration.zero,
+          renderLabel: (document) async {
+            renderedDocument = document;
+            return MonochromeRaster(
+              width: document.widthDots,
+              height: document.heightDots,
+              pixels: Uint8List(document.widthDots * document.heightDots),
+            );
+          },
+        ),
+      ),
+    );
+    await tester.tap(find.text('Scan for D11H'));
+    await tester.pump();
+    transport.emitAdvertisement();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 25));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('D11_H'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const Key('label-text-input')),
+      'Codex label',
+    );
+    tester.testTextInput.hide();
+    await tester.pumpAndSettle();
+    final sizeDropdown = tester.widget<DropdownButton<String>>(
+      find.descendant(
+        of: find.byKey(const Key('label-size-select')),
+        matching: find.byType(DropdownButton<String>),
+      ),
+    );
+    sizeDropdown.onChanged?.call('12x30');
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Print text label'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    final printButton = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Print text label'),
+    );
+    expect(printButton.onPressed, isNotNull);
+    await tester.tap(find.text('Print text label'));
+    for (
+      var attempt = 0;
+      attempt < 200 && transport.rasterRowWriteCount < 96;
+      attempt++
+    ) {
+      await tester.pump(const Duration(milliseconds: 10));
+    }
+    await tester.pumpAndSettle();
+
+    expect(renderedDocument?.size.widthMm, 30);
+    expect(renderedDocument?.size.heightMm, 12);
+    expect(transport.rasterRowWriteCount, 96);
+    final message = tester.widget<Text>(
+      find.descendant(of: find.byType(SnackBar), matching: find.byType(Text)),
+    );
+    expect(message.data, 'Printer confirmed text label.');
+  });
 }
 
 final class _ProbeTestTransport implements BleTransport {
@@ -94,6 +181,7 @@ final class _ProbeTestTransport implements BleTransport {
   );
   final _notifications = StreamController<Uint8List>.broadcast(sync: true);
   int writeCount = 0;
+  int rasterRowWriteCount = 0;
 
   @override
   BleReadiness get currentReadiness => BleReadiness.ready;
@@ -186,15 +274,23 @@ final class _ProbeTestTransport implements BleTransport {
       0x23 => '55 55 33 01 01 33 AA AA',
       0x21 => '55 55 31 01 01 31 AA AA',
       0x01 => '55 55 02 01 01 02 AA AA',
+      0x03 => '55 55 04 01 01 04 AA AA',
       0x13 => '55 55 14 02 01 00 17 AA AA',
+      0x15 => '55 55 16 01 01 16 AA AA',
       0x84 => '55 55 D3 03 01 02 01 D2 AA AA',
       0xA3 => '55 55 B3 08 00 01 64 64 15 16 00 00 B9 AA AA',
       0xE3 => '55 55 E4 01 01 E4 AA AA',
       0xF3 => '55 55 F4 01 01 F4 AA AA',
       0x19 => '55 55 00 01 01 00 AA AA',
+      0x85 => null,
       _ => throw StateError('Unexpected command $command'),
     };
-    scheduleMicrotask(() => _notifications.add(parseHexBytes(response)));
+    if (command == 0x85) {
+      rasterRowWriteCount++;
+    }
+    if (response != null) {
+      scheduleMicrotask(() => _notifications.add(parseHexBytes(response)));
+    }
   }
 
   @override

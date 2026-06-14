@@ -5,7 +5,9 @@ import 'dart:typed_data';
 import '../ble/ble_failure.dart';
 import '../ble/ble_models.dart';
 import '../ble/ble_transport.dart';
+import '../label/monochrome_raster.dart';
 import 'captured_test_print.dart';
+import 'd11h_raster_encoder.dart';
 import 'hex_codec.dart';
 import 'probe_event.dart';
 
@@ -918,6 +920,134 @@ final class ProbeController {
     }
   }
 
+  Future<void> printRaster(
+    BleCharacteristic characteristic,
+    MonochromeRaster raster, {
+    int density = 3,
+    int labelType = 1,
+    int quantity = 1,
+    Duration interWriteDelay = const Duration(milliseconds: 10),
+    Duration statusPollDelay = const Duration(milliseconds: 100),
+    Duration responseTimeout = const Duration(seconds: 2),
+    int maxStatusPolls = 50,
+  }) async {
+    _ensureConnected('print a raster label');
+    if (_printingCapturedTestLabel) {
+      throw StateError('A print is already in progress.');
+    }
+    if (!characteristic.canNotify ||
+        !characteristic.properties.contains(
+          BleCharacteristicProperty.writeWithoutResponse,
+        )) {
+      throw StateError(
+        'Raster printing requires notify and writeWithoutResponse.',
+      );
+    }
+    if (density < 1 || density > 5) {
+      throw RangeError.range(density, 1, 5, 'density');
+    }
+    if (labelType < 1 || labelType > 3) {
+      throw RangeError.range(labelType, 1, 3, 'labelType');
+    }
+    if (quantity < 1 || quantity > 0xFFFF) {
+      throw RangeError.range(quantity, 1, 0xFFFF, 'quantity');
+    }
+
+    final rows = encodeD11hRasterRows(raster);
+    final largestWrite = rows.fold<int>(
+      0,
+      (largest, row) => row.length > largest ? row.length : largest,
+    );
+    final mtu = _mtu;
+    if (mtu == null || mtu < largestWrite + 3) {
+      throw StateError(
+        'Raster printing requires MTU ${largestWrite + 3} or larger; '
+        'negotiated MTU is ${mtu ?? 'unknown'}.',
+      );
+    }
+
+    _printingCapturedTestLabel = true;
+    try {
+      await subscribe(characteristic);
+      final deviceId = _connectedDevice!;
+      final setup = <(Uint8List, int)>[
+        (buildD11hCommand(0x23, <int>[labelType]), 0x33),
+        (buildD11hCommand(0x21, <int>[density]), 0x31),
+        (buildD11hCommand(0x01, const <int>[1]), 0x02),
+        (buildD11hCommand(0x03, const <int>[1]), 0x04),
+        (
+          buildD11hCommand(0x13, <int>[
+            raster.height >> 8,
+            raster.height & 0xFF,
+            raster.width >> 8,
+            raster.width & 0xFF,
+          ]),
+          0x14,
+        ),
+        (buildD11hCommand(0x15, <int>[quantity >> 8, quantity & 0xFF]), 0x16),
+      ];
+      for (final (command, expectedResponse) in setup) {
+        await _writeAndWaitForCommand(
+          deviceId,
+          characteristic,
+          command,
+          expectedResponse,
+          responseTimeout,
+        );
+      }
+
+      for (final row in rows) {
+        await _writeWithoutResponse(deviceId, characteristic, row);
+        if (interWriteDelay > Duration.zero) {
+          await Future<void>.delayed(interWriteDelay);
+        }
+      }
+
+      await _writeAndWaitForCommand(
+        deviceId,
+        characteristic,
+        buildD11hCommand(0xE3, const <int>[1]),
+        0xE4,
+        responseTimeout,
+      );
+
+      var completed = false;
+      for (var poll = 0; poll < maxStatusPolls; poll++) {
+        final status = await _writeAndWaitForCommand(
+          deviceId,
+          characteristic,
+          buildD11hCommand(0xA3, const <int>[1]),
+          0xB3,
+          responseTimeout,
+        );
+        if (_printedPageCount(status) >= quantity) {
+          completed = true;
+          break;
+        }
+        await Future<void>.delayed(statusPollDelay);
+      }
+      if (!completed) {
+        throw TimeoutException(
+          'Printer did not report print completion.',
+          statusPollDelay * maxStatusPolls,
+        );
+      }
+
+      await _writeAndWaitForCommand(
+        deviceId,
+        characteristic,
+        buildD11hCommand(0xF3, const <int>[1]),
+        0xF4,
+        responseTimeout,
+      );
+    } catch (error) {
+      _recordError('raster print failed', error);
+      rethrow;
+    } finally {
+      _printingCapturedTestLabel = false;
+    }
+  }
+
   Future<Uint8List> _writeAndWaitForCommand(
     BleDeviceId deviceId,
     BleCharacteristic characteristic,
@@ -942,8 +1072,32 @@ final class ProbeController {
     return response;
   }
 
+  Future<void> _writeWithoutResponse(
+    BleDeviceId deviceId,
+    BleCharacteristic characteristic,
+    Uint8List bytes,
+  ) async {
+    await _transport.write(
+      deviceId,
+      characteristic,
+      bytes,
+      mode: BleWriteMode.withoutResponse,
+    );
+    _record(
+      ProbeEventKind.write,
+      '${characteristic.characteristicUuid} ${_formatPayload(bytes)}',
+    );
+  }
+
   bool _isCompletedPrintStatus(Uint8List frame) =>
       frame.length >= 13 && frame[2] == 0xB3 && frame[5] == 0x01;
+
+  int _printedPageCount(Uint8List frame) {
+    if (frame.length < 11 || frame[2] != 0xB3 || frame[3] < 4) {
+      throw const FormatException('Invalid D11H print status response.');
+    }
+    return frame[4] << 8 | frame[5];
+  }
 
   String _newSessionId() {
     final random = Random.secure();
