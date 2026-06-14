@@ -4,8 +4,8 @@ import 'dart:typed_data';
 import 'package:d11h_probe/probe_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:niimbot_lib/niimbot.dart';
-import 'package:niimbot_lib/niimbot_research.dart';
+import 'package:flutter_niimbot/niimbot.dart';
+import 'package:flutter_niimbot/niimbot_research.dart';
 
 void main() {
   test('uses conservative raster pacing by default', () {

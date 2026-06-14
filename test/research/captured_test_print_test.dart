@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:niimbot_lib/niimbot_research.dart';
+import 'package:flutter_niimbot/niimbot_research.dart';
 
 void main() {
   test('captured print writes contain valid D11H frames in observed order', () {

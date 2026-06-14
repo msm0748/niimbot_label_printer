@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:niimbot_lib/niimbot.dart';
-import 'package:niimbot_lib/src/ble/ble_transport.dart';
+import 'package:flutter_niimbot/niimbot.dart';
+import 'package:flutter_niimbot/src/ble/ble_transport.dart';
 
 final class FakeBleWrite {
   FakeBleWrite({

@@ -1,7 +1,13 @@
-name: niimbot_lib
-description: A reliable Flutter SDK for NIIMBOT D11H BLE label printing.
+name: flutter_niimbot
+description: An unofficial Flutter package for rendering and printing labels with NIIMBOT Bluetooth label printers. Currently supports D11H only.
 version: 0.1.0-dev.1
-publish_to: none
+repository: https://github.com/msm0748/niimbot_label_printer
+issue_tracker: https://github.com/msm0748/niimbot_label_printer/issues
+topics:
+  - bluetooth
+  - ble
+  - label-printer
+  - niimbot
 
 environment:
   sdk: ^3.11.5
@@ -10,7 +16,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  flutter_reactive_ble: 5.5.0
+  flutter_reactive_ble: ^5.5.0
 
 dev_dependencies:
   flutter_test:

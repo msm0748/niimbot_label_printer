@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:niimbot_lib/niimbot_research.dart';
+import 'package:flutter_niimbot/niimbot_research.dart';
 
 void main() {
   const deviceId = BleDeviceId('device-1');

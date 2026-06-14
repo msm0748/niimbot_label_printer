@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:niimbot_lib/niimbot_research.dart';
+import 'package:flutter_niimbot/niimbot_research.dart' as niimbot;
 
 import 'probe_page.dart';
 
@@ -16,7 +16,9 @@ class D11hProbeApp extends StatelessWidget {
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
       ),
-      home: ProbePage(controller: ProbeController(ReactiveBleTransport())),
+      home: ProbePage(
+        controller: niimbot.ProbeController(niimbot.ReactiveBleTransport()),
+      ),
     );
   }
 }

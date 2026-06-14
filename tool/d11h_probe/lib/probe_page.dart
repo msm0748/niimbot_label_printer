@@ -3,8 +3,8 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:niimbot_lib/niimbot.dart';
-import 'package:niimbot_lib/niimbot_research.dart';
+import 'package:flutter_niimbot/niimbot.dart';
+import 'package:flutter_niimbot/niimbot_research.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 typedef PermissionRequester = Future<bool> Function();
