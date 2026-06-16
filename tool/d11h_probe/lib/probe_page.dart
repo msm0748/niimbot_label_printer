@@ -75,6 +75,7 @@ class _ProbePageState extends State<ProbePage> {
   var _labelFontSize = 18.0;
   var _labelWrap = true;
   Future<MonochromeRaster>? _previewFuture;
+  D11hMediaProbeResult? _mediaProbeResult;
 
   @override
   void initState() {
@@ -176,6 +177,21 @@ class _ProbePageState extends State<ProbePage> {
       _showMessage('Printer confirmed print completion.');
     } catch (error) {
       _showMessage('Captured test print failed: $error');
+    } finally {
+      if (mounted) {
+        setState(() => _busy = false);
+      }
+    }
+  }
+
+  Future<void> _detectMedia(BleCharacteristic characteristic) async {
+    setState(() => _busy = true);
+    try {
+      final result = await widget.controller.queryMediaProbe(characteristic);
+      setState(() => _mediaProbeResult = result);
+      _showMessage('Media probe completed.');
+    } catch (error) {
+      _showMessage('Media probe failed: $error');
     } finally {
       if (mounted) {
         setState(() => _busy = false);
@@ -319,6 +335,26 @@ class _ProbePageState extends State<ProbePage> {
                 icon: const Icon(Icons.print_outlined),
                 label: const Text('Print captured test label'),
               ),
+            if (connected && capturedPrintCharacteristic != null)
+              FilledButton.icon(
+                onPressed: _busy
+                    ? null
+                    : () => _detectMedia(capturedPrintCharacteristic),
+                icon: const Icon(Icons.sensors_outlined),
+                label: const Text('Detect media'),
+              ),
+            if (_mediaProbeResult case final result?) ...<Widget>[
+              const SizedBox(height: 12),
+              Text(
+                'Media probe',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 8),
+              SelectableText(
+                _formatMediaProbeResult(result),
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+              ),
+            ],
             const SizedBox(height: 16),
             Text('Devices', style: Theme.of(context).textTheme.titleLarge),
             if (devices.isEmpty)
@@ -769,6 +805,24 @@ class _ProbePageState extends State<ProbePage> {
     }
   }
 }
+
+String _formatMediaProbeResult(D11hMediaProbeResult result) {
+  final information = result.informationResponse;
+  final status = result.statusResponse;
+  final lines = <String>[
+    'Information 0x${_formatCommand(information.command)}: '
+        '${information.payloadHex}',
+  ];
+  if (status != null) {
+    lines.add(
+      'Status 0x${_formatCommand(status.command)}: ${status.payloadHex}',
+    );
+  }
+  return lines.join('\n');
+}
+
+String _formatCommand(int command) =>
+    command.toRadixString(16).toUpperCase().padLeft(2, '0');
 
 class _StatusCard extends StatelessWidget {
   const _StatusCard({

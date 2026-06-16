@@ -197,6 +197,40 @@ void main() {
     );
     expect(message.data, 'Printer confirmed text label.');
   });
+
+  testWidgets('detects media and renders raw probe responses', (tester) async {
+    final transport = _ProbeTestTransport();
+    final controller = ProbeController(transport);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ProbePage(
+          controller: controller,
+          requestPermissions: () async => true,
+          scanDuration: const Duration(milliseconds: 20),
+          rasterInterWriteDelay: Duration.zero,
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Scan for D11H'));
+    await tester.pump();
+    transport.emitAdvertisement();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 25));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('D11_H'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Detect media'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Information 0x1B: 01 02'), findsOneWidget);
+    expect(
+      find.textContaining('Status 0xB3: 00 01 64 64 15 16 00 00'),
+      findsOneWidget,
+    );
+  });
 }
 
 final class _ProbeTestTransport implements BleTransport {
@@ -303,6 +337,7 @@ final class _ProbeTestTransport implements BleTransport {
       0x13 => '55 55 14 02 01 00 17 AA AA',
       0x15 => '55 55 16 01 01 16 AA AA',
       0x84 => '55 55 D3 03 01 02 01 D2 AA AA',
+      0x1A => '55 55 1B 02 01 02 1A AA AA',
       0xA3 => '55 55 B3 08 00 01 64 64 15 16 00 00 B9 AA AA',
       0xE3 => '55 55 E4 01 01 E4 AA AA',
       0xF3 => '55 55 F4 01 01 F4 AA AA',
