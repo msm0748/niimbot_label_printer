@@ -89,6 +89,23 @@ observed write-without-response and notification behavior.
 | SEND `F3`, RECV `F4` after terminal status | finalize completed print job | compare successful, cancelled, and failed jobs | open |
 | SEND `19 02 01 01`, RECV generic `00 01 01` | leave print mode or session cleanup | compare app disconnect and consecutive-print traces | open |
 
+### Media detection probe
+
+The research app includes a D11H media probe that sends `1A` and optionally
+one idle `A3` query on the print characteristic. This is not verified as RFID
+or media-SKU detection.
+
+Initial iOS procedure:
+
+1. Run the probe three times with the current label roll loaded.
+2. Open or remove the label path if physically safe, then run it three times.
+3. Reinsert the same label roll and run it three times.
+4. Compare sanitized `1B` and `B3` payloads across states.
+
+Do not promote any byte to a named media field until repeated runs confirm it.
+Do not claim media SKU detection until at least two different media rolls are
+tested.
+
 ## Verified Facts
 
 Move a fact here only after it is reproduced at least three times on Android and
