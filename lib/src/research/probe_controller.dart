@@ -7,6 +7,7 @@ import '../ble/ble_models.dart';
 import '../ble/ble_transport.dart';
 import '../label/monochrome_raster.dart';
 import 'captured_test_print.dart';
+import 'd11h_media_probe.dart';
 import 'd11h_raster_encoder.dart';
 import 'hex_codec.dart';
 import 'probe_event.dart';
@@ -823,6 +824,52 @@ final class ProbeController {
     }
   }
 
+  Future<D11hMediaProbeResult> queryMediaProbe(
+    BleCharacteristic characteristic, {
+    bool includeStatus = true,
+    Duration responseTimeout = const Duration(seconds: 2),
+  }) async {
+    _ensureConnected('query media probe');
+    if (!characteristic.canNotify ||
+        !characteristic.properties.contains(
+          BleCharacteristicProperty.writeWithoutResponse,
+        )) {
+      throw StateError(
+        'Media probing requires notify and writeWithoutResponse.',
+      );
+    }
+
+    try {
+      await subscribe(characteristic);
+      final deviceId = _connectedDevice!;
+      final information = await _writeAndWaitForCommand(
+        deviceId,
+        characteristic,
+        buildD11hCommand(0x1A, const <int>[]),
+        0x1B,
+        responseTimeout,
+      );
+      final status = includeStatus
+          ? await _writeAndWaitForCommand(
+              deviceId,
+              characteristic,
+              buildD11hCommand(0xA3, const <int>[]),
+              0xB3,
+              responseTimeout,
+            )
+          : null;
+
+      return D11hMediaProbeResult(
+        createdAt: DateTime.now().toUtc(),
+        informationResponse: _protocolFrameFromRaw(information),
+        statusResponse: status == null ? null : _protocolFrameFromRaw(status),
+      );
+    } catch (error) {
+      _recordError('media probe failed', error);
+      rethrow;
+    }
+  }
+
   Future<void> printCapturedTestLabel(
     BleCharacteristic characteristic, {
     Duration interWriteDelay = const Duration(milliseconds: 80),
@@ -1131,6 +1178,26 @@ final class ProbeController {
     _record(
       ProbeEventKind.write,
       '${characteristic.characteristicUuid} ${_formatPayload(bytes)}',
+    );
+  }
+
+  D11hProtocolFrame _protocolFrameFromRaw(Uint8List frame) {
+    if (frame.length < 7 ||
+        frame[0] != 0x55 ||
+        frame[1] != 0x55 ||
+        frame[frame.length - 2] != 0xAA ||
+        frame[frame.length - 1] != 0xAA) {
+      throw const FormatException('Invalid D11H protocol frame.');
+    }
+    final payloadLength = frame[3];
+    final payloadStart = 4;
+    final payloadEnd = payloadStart + payloadLength;
+    if (payloadEnd + 3 != frame.length) {
+      throw const FormatException('Invalid D11H payload length.');
+    }
+    return D11hProtocolFrame(
+      command: frame[2],
+      payload: Uint8List.fromList(frame.sublist(payloadStart, payloadEnd)),
     );
   }
 
