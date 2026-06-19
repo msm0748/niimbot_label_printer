@@ -41,10 +41,8 @@ void main() {
         informationResponse: D11hProtocolFrame(command: 0x1B, payload: payload),
         statusResponse: null,
       ),
-      profile: D11hMediaRollProfile(
+      profile: D11hMediaRollProfile.fromTotalLabels(
         totalLabels: 260,
-        counterAtBaseline: 256,
-        remainingLabelsAtBaseline: 260,
         name: '12x22',
       ),
     );
@@ -57,6 +55,18 @@ void main() {
     expect(info.remainingEstimate?.remainingLabels, 259);
     expect(info.remainingEstimate?.remainingPercent, closeTo(99.615, 0.001));
     expect(info.remainingEstimate?.isOutOfRange, isFalse);
+  });
+
+  test('estimates remaining labels from total and observed counter only', () {
+    final estimate = D11hRemainingEstimate.fromCounter(
+      currentCounter: 456,
+      profile: D11hMediaRollProfile.fromTotalLabels(totalLabels: 260),
+    );
+
+    expect(estimate.usedLabels, 200);
+    expect(estimate.remainingLabels, 60);
+    expect(estimate.remainingPercent, closeTo(23.076, 0.001));
+    expect(estimate.isOutOfRange, isFalse);
   });
 
   test('parses 12x30 loaded response with caller profile', () {

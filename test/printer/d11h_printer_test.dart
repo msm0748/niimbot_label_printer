@@ -312,10 +312,8 @@ void main() {
       final connectCount = transport.connectCallCount;
 
       final info = await printer.readMediaInfo(
-        profile: D11hMediaRollProfile(
+        profile: D11hMediaRollProfile.fromTotalLabels(
           totalLabels: 260,
-          counterAtBaseline: 256,
-          remainingLabelsAtBaseline: 260,
           name: '12x22',
         ),
       );

@@ -118,10 +118,8 @@ estimates:
 
 ```dart
 final info = await printer.readMediaInfo(
-  profile: D11hMediaRollProfile(
+  profile: D11hMediaRollProfile.fromTotalLabels(
     totalLabels: 260,
-    counterAtBaseline: 256,
-    remainingLabelsAtBaseline: 260,
     name: '12x22 roll',
   ),
 );
@@ -132,19 +130,16 @@ print(info.remainingEstimate?.remainingLabels);
 print(info.remainingEstimate?.remainingPercent);
 ```
 
-`counterAtBaseline` is the opaque RFID counter observed at the moment tracking
-starts. It is not the label count. `remainingLabelsAtBaseline` is the label
-count you want the estimate to start from. For a new 195-label 12x30 roll, use
-`remainingLabelsAtBaseline: 195`; for a used 260-label roll with about 60
-labels left, use `remainingLabelsAtBaseline: 60`.
+`D11hMediaRollProfile.fromTotalLabels()` uses the observed D11H full-roll
+counter of `256`. With that profile, applications only provide the roll's total
+label count; the current RFID counter determines the remaining labels and
+percentage.
 
 To auto-detect media after connecting, call `readMediaInfo()` immediately after
 `connect()` in the app layer. The probe app does this so iOS testing shows the
 loaded roll, counter, and remaining percentage as soon as the printer connects.
-The probe app also persists tracking profiles by the detected roll identifier:
-enter the total labels and the currently remaining labels, use the current
-counter as the baseline, then save the tracking profile. Reopening the probe app
-will load that profile for the same roll instead of starting again at 100%.
+In the probe app, enter only `Total labels`; the app uses the detected counter
+to show the remaining percentage.
 
 Without a profile, the library reports loaded/not-loaded state, candidate
 identifiers, raw frames, and the observed counter, but remaining labels are

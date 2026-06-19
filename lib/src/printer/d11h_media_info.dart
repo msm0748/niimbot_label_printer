@@ -46,6 +46,19 @@ final class D11hMediaRollProfile {
     );
   }
 
+  factory D11hMediaRollProfile.fromTotalLabels({
+    required int totalLabels,
+    int fullRollCounter = 256,
+    String? name,
+  }) {
+    return D11hMediaRollProfile(
+      totalLabels: totalLabels,
+      counterAtBaseline: fullRollCounter,
+      remainingLabelsAtBaseline: totalLabels,
+      name: name,
+    );
+  }
+
   final int totalLabels;
   final int counterAtBaseline;
   final int remainingLabelsAtBaseline;

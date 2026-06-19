@@ -79,6 +79,8 @@ Fields:
   application chooses the tracking baseline.
 - `remainingLabelsAtBaseline`: remaining label count at that same baseline,
   from `0` through `totalLabels`.
+- `fromTotalLabels(totalLabels: ...)`: convenience constructor for the observed
+  D11H full-roll counter baseline of `256`.
 - `name`: optional display name such as `12x22` or `12x30`.
 
 The library does not ship default total-label presets in this first pass.
@@ -185,14 +187,13 @@ Raw information: ...
 Raw status: ...
 ```
 
-To let the user test directly, add simple profile controls in the probe app:
+To let the user test directly, add a simple total-count control in the probe
+app:
 
 - Total labels numeric input.
-- Counter-at-baseline numeric input.
-- Remaining-labels-at-baseline numeric input.
-- A clear affordance to copy the latest counter into the baseline field.
-- A save action that persists the profile by detected roll identity so the
-  estimate survives app restarts.
+- Automatic media read immediately after connecting.
+- Remaining percentage calculated from the detected counter and the user-entered
+  total count.
 
 The probe app should not imply that candidate strings are official SKU codes.
 
@@ -210,13 +211,10 @@ Unit tests:
 
 Probe app widget tests:
 
-- Shows state, counter, remaining labels, and percent when profile inputs are
+- Shows state, counter, remaining labels, and percent when total labels are
   provided.
-- Shows `unknown` remaining when no complete profile is provided.
-- Can set the current counter as baseline for direct manual testing.
-- Does not infer a full roll just because the user copied the current counter.
-- Restores a saved profile for the same detected roll identity after the probe
-  page is recreated.
+- Shows `unknown` remaining when no total count is provided.
+- Estimates a used roll from only total labels and the detected counter.
 
 Manual iOS testing:
 
@@ -224,14 +222,10 @@ Manual iOS testing:
 2. Confirm the automatic media read shows state, candidate identifiers, and
    counter.
 3. Enter total label count for the loaded roll.
-4. Enter remaining labels at the baseline, or use total labels for a new roll.
-5. Set the current counter as baseline if starting a new tracking session.
-6. Save the tracking profile.
-7. Print one label.
-8. Run `Detect media` again.
-9. Confirm remaining labels decreases by one and percent updates.
-10. Restart the probe app and reconnect; confirm the same roll loads the saved
-    profile instead of showing 100%.
+4. Confirm remaining labels and percent appear.
+5. Print one label.
+6. Run `Detect media` again.
+7. Confirm remaining labels decreases by one and percent updates.
 
 ## Compatibility
 
