@@ -102,7 +102,7 @@ void main() {
     await tester.tap(find.text('Print one label'));
     await tester.pumpAndSettle(const Duration(milliseconds: 300));
 
-    expect(transport.writeCount, 13);
+    expect(transport.writeCount, 15);
     expect(find.text('Printer confirmed print completion.'), findsOneWidget);
   });
 
@@ -232,25 +232,35 @@ void main() {
 
     await tester.enterText(find.byKey(const Key('media-total-input')), '260');
     await tester.enterText(
-      find.byKey(const Key('media-baseline-input')),
-      '256',
+      find.byKey(const Key('media-counter-baseline-input')),
+      '257',
+    );
+    await tester.enterText(
+      find.byKey(const Key('media-remaining-baseline-input')),
+      '60',
     );
     tester.testTextInput.hide();
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Detect media'));
+    await tester.scrollUntilVisible(
+      find.text('Media probe'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.pumpAndSettle();
 
     expect(find.textContaining('State: loaded'), findsOneWidget);
     expect(find.textContaining('Counter: 257'), findsOneWidget);
-    expect(find.textContaining('Remaining: 259 / 260 (99.6%)'), findsOneWidget);
+    expect(find.textContaining('Remaining: 60 / 260 (23.1%)'), findsOneWidget);
     expect(
       find.textContaining('Raw status 0xB3: 00 01 64 64 15 16 00 00'),
       findsOneWidget,
     );
   });
 
-  testWidgets('uses latest media counter as baseline', (tester) async {
+  testWidgets('uses latest media counter and total as tracking baseline', (
+    tester,
+  ) async {
     final transport = _ProbeTestTransport();
     final controller = ProbeController(transport);
 
@@ -274,17 +284,30 @@ void main() {
     await tester.tap(find.text('D11_H'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Detect media'));
+    await tester.enterText(find.byKey(const Key('media-total-input')), '260');
+    tester.testTextInput.hide();
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Use counter as baseline'));
+
+    await tester.tap(find.text('Use current as baseline'));
     await tester.pumpAndSettle();
 
     expect(
       tester
-          .widget<TextField>(find.byKey(const Key('media-baseline-input')))
+          .widget<TextField>(
+            find.byKey(const Key('media-counter-baseline-input')),
+          )
           .controller
           ?.text,
       '257',
+    );
+    expect(
+      tester
+          .widget<TextField>(
+            find.byKey(const Key('media-remaining-baseline-input')),
+          )
+          .controller
+          ?.text,
+      '260',
     );
   });
 }

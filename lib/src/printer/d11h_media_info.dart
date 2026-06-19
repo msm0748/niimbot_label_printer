@@ -5,13 +5,15 @@ enum D11hMediaState { loaded, notLoaded, unknown }
 final class D11hMediaRollProfile {
   D11hMediaRollProfile._({
     required this.totalLabels,
-    required this.baselineCounter,
+    required this.counterAtBaseline,
+    required this.remainingLabelsAtBaseline,
     this.name,
   });
 
   factory D11hMediaRollProfile({
     required int totalLabels,
-    required int baselineCounter,
+    required int counterAtBaseline,
+    required int remainingLabelsAtBaseline,
     String? name,
   }) {
     if (totalLabels <= 0) {
@@ -21,22 +23,32 @@ final class D11hMediaRollProfile {
         'Must be positive.',
       );
     }
-    if (baselineCounter < 0) {
+    if (counterAtBaseline < 0) {
       throw ArgumentError.value(
-        baselineCounter,
-        'baselineCounter',
+        counterAtBaseline,
+        'counterAtBaseline',
         'Must be non-negative.',
+      );
+    }
+    if (remainingLabelsAtBaseline < 0 ||
+        remainingLabelsAtBaseline > totalLabels) {
+      throw ArgumentError.value(
+        remainingLabelsAtBaseline,
+        'remainingLabelsAtBaseline',
+        'Must be between 0 and totalLabels.',
       );
     }
     return D11hMediaRollProfile._(
       totalLabels: totalLabels,
-      baselineCounter: baselineCounter,
+      counterAtBaseline: counterAtBaseline,
+      remainingLabelsAtBaseline: remainingLabelsAtBaseline,
       name: name,
     );
   }
 
   final int totalLabels;
-  final int baselineCounter;
+  final int counterAtBaseline;
+  final int remainingLabelsAtBaseline;
   final String? name;
 }
 
@@ -54,10 +66,15 @@ final class D11hRemainingEstimate {
     required int currentCounter,
     required D11hMediaRollProfile profile,
   }) {
-    final rawUsed = currentCounter - profile.baselineCounter;
-    final isOutOfRange = rawUsed < 0 || rawUsed > profile.totalLabels;
-    final used = rawUsed.clamp(0, profile.totalLabels);
-    final remaining = profile.totalLabels - used;
+    final rawUsedSinceBaseline = currentCounter - profile.counterAtBaseline;
+    final rawRemaining =
+        profile.remainingLabelsAtBaseline - rawUsedSinceBaseline;
+    final isOutOfRange =
+        rawUsedSinceBaseline < 0 ||
+        rawRemaining < 0 ||
+        rawRemaining > profile.totalLabels;
+    final remaining = rawRemaining.clamp(0, profile.totalLabels);
+    final used = profile.totalLabels - remaining;
     final ratio = remaining / profile.totalLabels;
     return D11hRemainingEstimate._(
       totalLabels: profile.totalLabels,

@@ -314,7 +314,8 @@ void main() {
       final info = await printer.readMediaInfo(
         profile: D11hMediaRollProfile(
           totalLabels: 260,
-          baselineCounter: 256,
+          counterAtBaseline: 256,
+          remainingLabelsAtBaseline: 260,
           name: '12x22',
         ),
       );

@@ -115,8 +115,10 @@ Observed iOS D11H media-counter behavior:
 - A 12x30 roll with a 195-label user-provided total was observed with a
   first-seen baseline of `03 01` (259).
 
-Remaining estimates require application-provided total labels and baseline
-counter values. The payload has not shown a direct total-label field.
+Remaining estimates require application-provided total labels, a counter
+captured at the tracking baseline, and the remaining label count at that same
+baseline. The payload has not shown a direct total-label field. The counter is
+opaque: values such as 256 or 265 are not themselves remaining-label counts.
 
 ## Verified Facts
 

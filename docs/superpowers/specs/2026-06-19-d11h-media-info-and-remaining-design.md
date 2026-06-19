@@ -75,13 +75,16 @@ Application-provided metadata for estimating remaining labels.
 Fields:
 
 - `totalLabels`: positive integer.
-- `baselineCounter`: non-negative integer counter value captured when the
-  application chooses the roll baseline.
+- `counterAtBaseline`: non-negative opaque RFID counter value captured when the
+  application chooses the tracking baseline.
+- `remainingLabelsAtBaseline`: remaining label count at that same baseline,
+  from `0` through `totalLabels`.
 - `name`: optional display name such as `12x22` or `12x30`.
 
 The library does not ship default total-label presets in this first pass.
 Applications can construct profiles from their own product data or from a
-first-seen baseline.
+first-seen baseline. For a new roll, `remainingLabelsAtBaseline` usually equals
+`totalLabels`; for a used roll, it is the user's approximate remaining count.
 
 ### `D11hRemainingEstimate`
 
@@ -92,15 +95,16 @@ Fields:
 - `remainingLabels`: clamped integer.
 - `remainingRatio`: double from `0.0` to `1.0`.
 - `remainingPercent`: double from `0.0` to `100.0`.
-- `isOutOfRange`: true when the counter is below baseline or usage exceeds the
-  profile total before clamping.
+- `isOutOfRange`: true when the counter is below baseline or the resulting
+  remaining count falls outside `0...totalLabels` before clamping.
 
 Calculation:
 
 ```text
-rawUsed = currentCounter - baselineCounter
-usedLabels = clamp(rawUsed, 0, totalLabels)
-remainingLabels = totalLabels - usedLabels
+rawUsedSinceBaseline = currentCounter - counterAtBaseline
+rawRemaining = remainingLabelsAtBaseline - rawUsedSinceBaseline
+remainingLabels = clamp(rawRemaining, 0, totalLabels)
+usedLabels = totalLabels - remainingLabels
 remainingRatio = remainingLabels / totalLabels
 remainingPercent = remainingRatio * 100
 ```
@@ -184,8 +188,9 @@ Raw status: ...
 To let the user test directly, add simple profile controls in the probe app:
 
 - Total labels numeric input.
-- Baseline counter numeric input.
-- A clear affordance to use the latest counter as the baseline.
+- Counter-at-baseline numeric input.
+- Remaining-labels-at-baseline numeric input.
+- A clear affordance to use the latest counter and total as the baseline.
 
 The probe app should not imply that candidate strings are official SKU codes.
 
@@ -205,18 +210,20 @@ Probe app widget tests:
 
 - Shows state, counter, remaining labels, and percent when profile inputs are
   provided.
-- Shows `unknown` remaining when no profile is provided.
+- Shows `unknown` remaining when no complete profile is provided.
 - Can set the current counter as baseline for direct manual testing.
 
 Manual iOS testing:
 
 1. Connect to D11H.
-2. Enter total label count for the loaded roll.
-3. Run `Detect media`.
-4. Set the current counter as baseline if starting a new tracking session.
-5. Print one label.
-6. Run `Detect media` again.
-7. Confirm remaining labels decreases by one and percent updates.
+2. Confirm the automatic media read shows state, candidate identifiers, and
+   counter.
+3. Enter total label count for the loaded roll.
+4. Enter remaining labels at the baseline, or use total labels for a new roll.
+5. Set the current counter as baseline if starting a new tracking session.
+6. Print one label.
+7. Run `Detect media` again.
+8. Confirm remaining labels decreases by one and percent updates.
 
 ## Compatibility
 

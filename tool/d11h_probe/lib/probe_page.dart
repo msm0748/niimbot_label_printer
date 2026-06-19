@@ -68,7 +68,8 @@ class _ProbePageState extends State<ProbePage> {
   final _customWidth = TextEditingController(text: '22');
   final _customHeight = TextEditingController(text: '12');
   final _mediaTotalLabels = TextEditingController();
-  final _mediaBaselineCounter = TextEditingController();
+  final _mediaCounterAtBaseline = TextEditingController();
+  final _mediaRemainingAtBaseline = TextEditingController();
   var _busy = false;
   var _labelSizePreset = '12x22';
   var _labelOrientation = LabelOrientation.normal;
@@ -98,7 +99,8 @@ class _ProbePageState extends State<ProbePage> {
     _customWidth.dispose();
     _customHeight.dispose();
     _mediaTotalLabels.dispose();
-    _mediaBaselineCounter.dispose();
+    _mediaCounterAtBaseline.dispose();
+    _mediaRemainingAtBaseline.dispose();
     super.dispose();
   }
 
@@ -130,6 +132,21 @@ class _ProbePageState extends State<ProbePage> {
       await widget.controller.connect(deviceId);
     } catch (error) {
       _showMessage('Connection failed: $error');
+      if (mounted) {
+        setState(() => _busy = false);
+      }
+      return;
+    }
+
+    try {
+      final characteristic = findD11hPrintCharacteristic(
+        widget.controller.services,
+      );
+      if (characteristic != null) {
+        await _readMediaProbe(characteristic);
+      }
+    } catch (error) {
+      _showMessage('Auto media probe failed: $error');
     } finally {
       if (mounted) {
         setState(() => _busy = false);
@@ -191,8 +208,7 @@ class _ProbePageState extends State<ProbePage> {
   Future<void> _detectMedia(BleCharacteristic characteristic) async {
     setState(() => _busy = true);
     try {
-      final result = await widget.controller.queryMediaProbe(characteristic);
-      setState(() => _mediaProbeResult = result);
+      await _readMediaProbe(characteristic);
       _showMessage('Media probe completed.');
     } catch (error) {
       _showMessage('Media probe failed: $error');
@@ -203,21 +219,40 @@ class _ProbePageState extends State<ProbePage> {
     }
   }
 
+  Future<void> _readMediaProbe(BleCharacteristic characteristic) async {
+    final result = await widget.controller.queryMediaProbe(characteristic);
+    if (mounted) {
+      setState(() => _mediaProbeResult = result);
+    }
+  }
+
   D11hMediaRollProfile? _mediaProfile() {
     final totalText = _mediaTotalLabels.text.trim();
-    final baselineText = _mediaBaselineCounter.text.trim();
-    if (totalText.isEmpty || baselineText.isEmpty) {
+    final counterText = _mediaCounterAtBaseline.text.trim();
+    final remainingText = _mediaRemainingAtBaseline.text.trim();
+    if (totalText.isEmpty || counterText.isEmpty || remainingText.isEmpty) {
       return null;
     }
     final total = int.tryParse(totalText);
-    final baseline = int.tryParse(baselineText);
-    if (total == null || total <= 0 || baseline == null || baseline < 0) {
+    final counter = int.tryParse(counterText);
+    final remaining = int.tryParse(remainingText);
+    if (total == null ||
+        total <= 0 ||
+        counter == null ||
+        counter < 0 ||
+        remaining == null ||
+        remaining < 0 ||
+        remaining > total) {
       return null;
     }
-    return D11hMediaRollProfile(totalLabels: total, baselineCounter: baseline);
+    return D11hMediaRollProfile(
+      totalLabels: total,
+      counterAtBaseline: counter,
+      remainingLabelsAtBaseline: remaining,
+    );
   }
 
-  void _useLatestCounterAsBaseline() {
+  void _useCurrentAsBaseline() {
     final result = _mediaProbeResult;
     if (result == null) {
       _showMessage('Run Detect media first.');
@@ -229,7 +264,14 @@ class _ProbePageState extends State<ProbePage> {
       _showMessage('No media counter available.');
       return;
     }
-    setState(() => _mediaBaselineCounter.text = '$counter');
+    setState(() {
+      _mediaCounterAtBaseline.text = '$counter';
+      final totalText = _mediaTotalLabels.text.trim();
+      if (_mediaRemainingAtBaseline.text.trim().isEmpty &&
+          totalText.isNotEmpty) {
+        _mediaRemainingAtBaseline.text = totalText;
+      }
+    });
   }
 
   Future<void> _printTextLabel(BleCharacteristic characteristic) async {
@@ -373,6 +415,7 @@ class _ProbePageState extends State<ProbePage> {
               TextField(
                 key: const Key('media-total-input'),
                 controller: _mediaTotalLabels,
+                onChanged: (_) => setState(() {}),
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
                   labelText: 'Total labels',
@@ -381,11 +424,25 @@ class _ProbePageState extends State<ProbePage> {
               ),
               const SizedBox(height: 8),
               TextField(
-                key: const Key('media-baseline-input'),
-                controller: _mediaBaselineCounter,
+                key: const Key('media-counter-baseline-input'),
+                controller: _mediaCounterAtBaseline,
+                onChanged: (_) => setState(() {}),
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
-                  labelText: 'Baseline counter',
+                  labelText: 'Counter at baseline',
+                  helperText: 'Use the current RFID counter at this moment.',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                key: const Key('media-remaining-baseline-input'),
+                controller: _mediaRemainingAtBaseline,
+                onChanged: (_) => setState(() {}),
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Remaining labels at baseline',
+                  helperText: 'For a new roll, enter the total label count.',
                   border: OutlineInputBorder(),
                 ),
               ),
@@ -393,8 +450,8 @@ class _ProbePageState extends State<ProbePage> {
               OutlinedButton(
                 onPressed: _mediaProbeResult == null
                     ? null
-                    : _useLatestCounterAsBaseline,
-                child: const Text('Use counter as baseline'),
+                    : _useCurrentAsBaseline,
+                child: const Text('Use current as baseline'),
               ),
             ],
             if (connected && capturedPrintCharacteristic != null)

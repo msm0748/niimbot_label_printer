@@ -43,7 +43,8 @@ void main() {
       ),
       profile: D11hMediaRollProfile(
         totalLabels: 260,
-        baselineCounter: 256,
+        counterAtBaseline: 256,
+        remainingLabelsAtBaseline: 260,
         name: '12x22',
       ),
     );
@@ -74,7 +75,8 @@ void main() {
       ),
       profile: D11hMediaRollProfile(
         totalLabels: 195,
-        baselineCounter: 259,
+        counterAtBaseline: 259,
+        remainingLabelsAtBaseline: 195,
         name: '12x30',
       ),
     );
@@ -86,10 +88,30 @@ void main() {
     expect(info.remainingEstimate?.remainingPercent, closeTo(96.923, 0.001));
   });
 
+  test('remaining estimate supports a used-roll baseline', () {
+    final estimate = D11hRemainingEstimate.fromCounter(
+      currentCounter: 458,
+      profile: D11hMediaRollProfile(
+        totalLabels: 260,
+        counterAtBaseline: 456,
+        remainingLabelsAtBaseline: 60,
+      ),
+    );
+
+    expect(estimate.usedLabels, 202);
+    expect(estimate.remainingLabels, 58);
+    expect(estimate.remainingPercent, closeTo(22.307, 0.001));
+    expect(estimate.isOutOfRange, isFalse);
+  });
+
   test('remaining estimate clamps impossible profile data', () {
     final estimate = D11hRemainingEstimate.fromCounter(
       currentCounter: 300,
-      profile: D11hMediaRollProfile(totalLabels: 10, baselineCounter: 100),
+      profile: D11hMediaRollProfile(
+        totalLabels: 10,
+        counterAtBaseline: 100,
+        remainingLabelsAtBaseline: 10,
+      ),
     );
 
     expect(estimate.usedLabels, 10);
