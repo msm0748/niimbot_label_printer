@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:d11h_probe/probe_page.dart';
@@ -13,6 +14,7 @@ void main() {
     final page = ProbePage(
       controller: controller,
       requestPermissions: () async => true,
+      mediaProfileStore: _MemoryMediaProfileStore(),
     );
 
     expect(page.rasterInterWriteDelay, const Duration(milliseconds: 30));
@@ -26,6 +28,7 @@ void main() {
         home: ProbePage(
           controller: controller,
           requestPermissions: () async => true,
+          mediaProfileStore: _MemoryMediaProfileStore(),
         ),
       ),
     );
@@ -45,6 +48,7 @@ void main() {
           requestPermissions: () async => true,
           scanDuration: const Duration(milliseconds: 20),
           rasterInterWriteDelay: Duration.zero,
+          mediaProfileStore: _MemoryMediaProfileStore(),
         ),
       ),
     );
@@ -82,6 +86,7 @@ void main() {
           requestPermissions: () async => true,
           scanDuration: const Duration(milliseconds: 20),
           rasterInterWriteDelay: Duration.zero,
+          mediaProfileStore: _MemoryMediaProfileStore(),
         ),
       ),
     );
@@ -120,6 +125,7 @@ void main() {
           requestPermissions: () async => true,
           scanDuration: const Duration(milliseconds: 20),
           rasterInterWriteDelay: Duration.zero,
+          mediaProfileStore: _MemoryMediaProfileStore(),
           renderLabel: (document) async {
             renderedDocument = document;
             return MonochromeRaster(
@@ -217,6 +223,7 @@ void main() {
           requestPermissions: () async => true,
           scanDuration: const Duration(milliseconds: 20),
           rasterInterWriteDelay: Duration.zero,
+          mediaProfileStore: _MemoryMediaProfileStore(),
         ),
       ),
     );
@@ -258,7 +265,7 @@ void main() {
     );
   });
 
-  testWidgets('uses latest media counter and total as tracking baseline', (
+  testWidgets('uses latest media counter without assuming a full roll', (
     tester,
   ) async {
     final transport = _ProbeTestTransport();
@@ -271,6 +278,7 @@ void main() {
           requestPermissions: () async => true,
           scanDuration: const Duration(milliseconds: 20),
           rasterInterWriteDelay: Duration.zero,
+          mediaProfileStore: _MemoryMediaProfileStore(),
         ),
       ),
     );
@@ -307,17 +315,144 @@ void main() {
           )
           .controller
           ?.text,
-      '260',
+      isEmpty,
     );
+  });
+
+  testWidgets('persists media tracking profile by detected roll identity', (
+    tester,
+  ) async {
+    final store = _MemoryMediaProfileStore();
+    final firstTransport = _ProbeTestTransport();
+    final firstController = ProbeController(firstTransport);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ProbePage(
+          controller: firstController,
+          requestPermissions: () async => true,
+          scanDuration: const Duration(milliseconds: 20),
+          rasterInterWriteDelay: Duration.zero,
+          mediaProfileStore: store,
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Scan for D11H'));
+    await tester.pump();
+    firstTransport.emitAdvertisement();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 25));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('D11_H'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byKey(const Key('media-total-input')), '260');
+    await tester.enterText(
+      find.byKey(const Key('media-remaining-baseline-input')),
+      '60',
+    );
+    tester.testTextInput.hide();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Use current as baseline'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Save tracking profile'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save tracking profile'));
+    await tester.pumpAndSettle();
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+
+    final secondTransport = _ProbeTestTransport(mediaCounter: 258);
+    final secondController = ProbeController(secondTransport);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ProbePage(
+          controller: secondController,
+          requestPermissions: () async => true,
+          scanDuration: const Duration(milliseconds: 20),
+          rasterInterWriteDelay: Duration.zero,
+          mediaProfileStore: store,
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Scan for D11H'));
+    await tester.pump();
+    secondTransport.emitAdvertisement();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 25));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('D11_H'));
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('Media probe'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Counter: 258'), findsOneWidget);
+    expect(find.textContaining('Remaining: 59 / 260 (22.7%)'), findsOneWidget);
+  });
+
+  test('file media profile store round-trips a saved profile', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'd11h-profile-store-test-',
+    );
+    addTearDown(() async {
+      if (await directory.exists()) {
+        await directory.delete(recursive: true);
+      }
+    });
+    final store = D11hProbeFileMediaProfileStore(
+      path: '${directory.path}/profiles.json',
+    );
+
+    await store.write(
+      'PC0G428330005464',
+      D11hMediaRollProfile(
+        totalLabels: 260,
+        counterAtBaseline: 257,
+        remainingLabelsAtBaseline: 60,
+      ),
+    );
+
+    final profile = await store.read('PC0G428330005464');
+
+    expect(profile?.totalLabels, 260);
+    expect(profile?.counterAtBaseline, 257);
+    expect(profile?.remainingLabelsAtBaseline, 60);
   });
 }
 
+final class _MemoryMediaProfileStore implements D11hProbeMediaProfileStore {
+  final _profiles = <String, D11hMediaRollProfile>{};
+
+  @override
+  Future<D11hMediaRollProfile?> read(String rollId) async => _profiles[rollId];
+
+  @override
+  Future<void> write(String rollId, D11hMediaRollProfile profile) async {
+    _profiles[rollId] = profile;
+  }
+}
+
 final class _ProbeTestTransport implements BleTransport {
+  _ProbeTestTransport({this.mediaCounter = 257});
+
   final _scan = StreamController<BleAdvertisement>.broadcast();
   final _connections = StreamController<BleConnectionUpdate>.broadcast(
     sync: true,
   );
   final _notifications = StreamController<Uint8List>.broadcast(sync: true);
+  final int mediaCounter;
   int writeCount = 0;
   int rasterDataWriteCount = 0;
 
@@ -417,7 +552,7 @@ final class _ProbeTestTransport implements BleTransport {
       0x15 => '55 55 16 01 01 16 AA AA',
       0x84 => '55 55 D3 03 01 02 01 D2 AA AA',
       0x1A => formatHexBytes(
-        buildD11hCommand(0x1B, const <int>[
+        buildD11hCommand(0x1B, <int>[
           0x88,
           0x1d,
           0x35,
@@ -460,8 +595,8 @@ final class _ProbeTestTransport implements BleTransport {
           0x01,
           0x38,
           0x00,
-          0x01,
-          0x01,
+          mediaCounter & 0xFF,
+          mediaCounter >> 8,
         ]),
       ),
       0xA3 => '55 55 B3 08 00 01 64 64 15 16 00 00 B9 AA AA',

@@ -119,6 +119,8 @@ Remaining estimates require application-provided total labels, a counter
 captured at the tracking baseline, and the remaining label count at that same
 baseline. The payload has not shown a direct total-label field. The counter is
 opaque: values such as 256 or 265 are not themselves remaining-label counts.
+Applications must persist the baseline profile per detected roll identity if
+they want estimates to survive app restarts.
 
 ## Verified Facts
 

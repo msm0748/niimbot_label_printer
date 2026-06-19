@@ -141,6 +141,10 @@ labels left, use `remainingLabelsAtBaseline: 60`.
 To auto-detect media after connecting, call `readMediaInfo()` immediately after
 `connect()` in the app layer. The probe app does this so iOS testing shows the
 loaded roll, counter, and remaining percentage as soon as the printer connects.
+The probe app also persists tracking profiles by the detected roll identifier:
+enter the total labels and the currently remaining labels, use the current
+counter as the baseline, then save the tracking profile. Reopening the probe app
+will load that profile for the same roll instead of starting again at 100%.
 
 Without a profile, the library reports loaded/not-loaded state, candidate
 identifiers, raw frames, and the observed counter, but remaining labels are

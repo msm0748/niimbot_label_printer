@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -14,6 +15,78 @@ typedef PermissionBatchRequester =
     Future<Map<Permission, PermissionStatus>> Function(
       List<Permission> permissions,
     );
+
+abstract interface class D11hProbeMediaProfileStore {
+  Future<D11hMediaRollProfile?> read(String rollId);
+
+  Future<void> write(String rollId, D11hMediaRollProfile profile);
+}
+
+final class D11hProbeFileMediaProfileStore
+    implements D11hProbeMediaProfileStore {
+  const D11hProbeFileMediaProfileStore({this.path});
+
+  final String? path;
+
+  File get _file {
+    final configuredPath = path;
+    if (configuredPath != null) {
+      return File(configuredPath);
+    }
+    final home = Platform.environment['HOME'];
+    final base = home == null || home.isEmpty
+        ? Directory.systemTemp
+        : Directory('$home/Documents');
+    return File('${base.path}/d11h_probe_media_profiles.json');
+  }
+
+  @override
+  Future<D11hMediaRollProfile?> read(String rollId) async {
+    final profiles = await _readProfiles();
+    final encoded = profiles[rollId];
+    if (encoded is! Map<String, Object?>) {
+      return null;
+    }
+    final totalLabels = encoded['totalLabels'];
+    final counterAtBaseline = encoded['counterAtBaseline'];
+    final remainingLabelsAtBaseline = encoded['remainingLabelsAtBaseline'];
+    if (totalLabels is! int ||
+        counterAtBaseline is! int ||
+        remainingLabelsAtBaseline is! int) {
+      return null;
+    }
+    return D11hMediaRollProfile(
+      totalLabels: totalLabels,
+      counterAtBaseline: counterAtBaseline,
+      remainingLabelsAtBaseline: remainingLabelsAtBaseline,
+    );
+  }
+
+  @override
+  Future<void> write(String rollId, D11hMediaRollProfile profile) async {
+    final profiles = await _readProfiles();
+    profiles[rollId] = <String, Object?>{
+      'totalLabels': profile.totalLabels,
+      'counterAtBaseline': profile.counterAtBaseline,
+      'remainingLabelsAtBaseline': profile.remainingLabelsAtBaseline,
+    };
+    final file = _file;
+    await file.parent.create(recursive: true);
+    await file.writeAsString(jsonEncode(profiles));
+  }
+
+  Future<Map<String, Object?>> _readProfiles() async {
+    final file = _file;
+    if (!await file.exists()) {
+      return <String, Object?>{};
+    }
+    final decoded = jsonDecode(await file.readAsString());
+    if (decoded is Map<String, Object?>) {
+      return Map<String, Object?>.from(decoded);
+    }
+    return <String, Object?>{};
+  }
+}
 
 Future<bool> requestProbePermissions({
   bool? isAndroid,
@@ -45,6 +118,7 @@ class ProbePage extends StatefulWidget {
     this.scanDuration = const Duration(seconds: 10),
     this.rasterInterWriteDelay = const Duration(milliseconds: 30),
     this.renderLabel = _renderDefaultLabel,
+    this.mediaProfileStore = const D11hProbeFileMediaProfileStore(),
   });
 
   final ProbeController controller;
@@ -52,6 +126,7 @@ class ProbePage extends StatefulWidget {
   final Duration scanDuration;
   final Duration rasterInterWriteDelay;
   final LabelRasterRenderer renderLabel;
+  final D11hProbeMediaProfileStore mediaProfileStore;
 
   @override
   State<ProbePage> createState() => _ProbePageState();
@@ -79,6 +154,7 @@ class _ProbePageState extends State<ProbePage> {
   var _labelWrap = true;
   Future<MonochromeRaster>? _previewFuture;
   D11hMediaProbeResult? _mediaProbeResult;
+  String? _mediaRollId;
 
   @override
   void initState() {
@@ -221,8 +297,23 @@ class _ProbePageState extends State<ProbePage> {
 
   Future<void> _readMediaProbe(BleCharacteristic characteristic) async {
     final result = await widget.controller.queryMediaProbe(characteristic);
+    final info = D11hMediaInfo.fromProbeResult(result);
+    final rollId = _mediaRollIdentity(info);
+    final storedProfile = rollId == null
+        ? null
+        : await widget.mediaProfileStore.read(rollId);
     if (mounted) {
-      setState(() => _mediaProbeResult = result);
+      setState(() {
+        final previousRollId = _mediaRollId;
+        _mediaProbeResult = result;
+        _mediaRollId = rollId;
+        if (storedProfile != null) {
+          _applyMediaProfile(storedProfile);
+        } else if (rollId != previousRollId) {
+          _mediaCounterAtBaseline.clear();
+          _mediaRemainingAtBaseline.clear();
+        }
+      });
     }
   }
 
@@ -266,12 +357,32 @@ class _ProbePageState extends State<ProbePage> {
     }
     setState(() {
       _mediaCounterAtBaseline.text = '$counter';
-      final totalText = _mediaTotalLabels.text.trim();
-      if (_mediaRemainingAtBaseline.text.trim().isEmpty &&
-          totalText.isNotEmpty) {
-        _mediaRemainingAtBaseline.text = totalText;
-      }
     });
+  }
+
+  Future<void> _saveTrackingProfile() async {
+    final rollId = _mediaRollId;
+    if (rollId == null) {
+      _showMessage('Run Detect media first.');
+      return;
+    }
+    final profile = _mediaProfile();
+    if (profile == null) {
+      _showMessage('Enter total, counter, and remaining labels.');
+      return;
+    }
+    try {
+      await widget.mediaProfileStore.write(rollId, profile);
+      _showMessage('Tracking profile saved.');
+    } catch (error) {
+      _showMessage('Saving tracking profile failed: $error');
+    }
+  }
+
+  void _applyMediaProfile(D11hMediaRollProfile profile) {
+    _mediaTotalLabels.text = '${profile.totalLabels}';
+    _mediaCounterAtBaseline.text = '${profile.counterAtBaseline}';
+    _mediaRemainingAtBaseline.text = '${profile.remainingLabelsAtBaseline}';
   }
 
   Future<void> _printTextLabel(BleCharacteristic characteristic) async {
@@ -452,6 +563,12 @@ class _ProbePageState extends State<ProbePage> {
                     ? null
                     : _useCurrentAsBaseline,
                 child: const Text('Use current as baseline'),
+              ),
+              OutlinedButton(
+                onPressed: _mediaProbeResult == null
+                    ? null
+                    : _saveTrackingProfile,
+                child: const Text('Save tracking profile'),
               ),
             ],
             if (connected && capturedPrintCharacteristic != null)
@@ -952,6 +1069,9 @@ String _formatMediaProbeResult(
   }
   return lines.join('\n');
 }
+
+String? _mediaRollIdentity(D11hMediaInfo info) =>
+    info.candidateCode ?? info.candidateSerial;
 
 String _formatCommand(int command) =>
     command.toRadixString(16).toUpperCase().padLeft(2, '0');

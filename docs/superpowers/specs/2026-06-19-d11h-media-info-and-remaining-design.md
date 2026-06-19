@@ -190,7 +190,9 @@ To let the user test directly, add simple profile controls in the probe app:
 - Total labels numeric input.
 - Counter-at-baseline numeric input.
 - Remaining-labels-at-baseline numeric input.
-- A clear affordance to use the latest counter and total as the baseline.
+- A clear affordance to copy the latest counter into the baseline field.
+- A save action that persists the profile by detected roll identity so the
+  estimate survives app restarts.
 
 The probe app should not imply that candidate strings are official SKU codes.
 
@@ -212,6 +214,9 @@ Probe app widget tests:
   provided.
 - Shows `unknown` remaining when no complete profile is provided.
 - Can set the current counter as baseline for direct manual testing.
+- Does not infer a full roll just because the user copied the current counter.
+- Restores a saved profile for the same detected roll identity after the probe
+  page is recreated.
 
 Manual iOS testing:
 
@@ -221,9 +226,12 @@ Manual iOS testing:
 3. Enter total label count for the loaded roll.
 4. Enter remaining labels at the baseline, or use total labels for a new roll.
 5. Set the current counter as baseline if starting a new tracking session.
-6. Print one label.
-7. Run `Detect media` again.
-8. Confirm remaining labels decreases by one and percent updates.
+6. Save the tracking profile.
+7. Print one label.
+8. Run `Detect media` again.
+9. Confirm remaining labels decreases by one and percent updates.
+10. Restart the probe app and reconnect; confirm the same roll loads the saved
+    profile instead of showing 100%.
 
 ## Compatibility
 
