@@ -76,6 +76,78 @@ void _respondToPrintWrites(FakeBleTransport transport) {
   };
 }
 
+void _respondToMediaProbeWrites(FakeBleTransport transport) {
+  transport.writeResponder = (write) {
+    final command = write.bytes[2];
+    final response = switch (command) {
+      0x1A => buildD11hCommand(0x1B, const <int>[
+        0x88,
+        0x1d,
+        0x35,
+        0xd3,
+        0x07,
+        0x97,
+        0x00,
+        0x00,
+        0x0d,
+        0x36,
+        0x39,
+        0x37,
+        0x32,
+        0x38,
+        0x34,
+        0x32,
+        0x37,
+        0x34,
+        0x37,
+        0x35,
+        0x34,
+        0x39,
+        0x10,
+        0x50,
+        0x43,
+        0x30,
+        0x47,
+        0x34,
+        0x32,
+        0x38,
+        0x33,
+        0x33,
+        0x30,
+        0x30,
+        0x30,
+        0x35,
+        0x34,
+        0x36,
+        0x34,
+        0x01,
+        0x38,
+        0x00,
+        0x01,
+        0x01,
+      ]),
+      0xA3 => buildD11hCommand(0xB3, const <int>[
+        0,
+        1,
+        0x64,
+        0x64,
+        0x15,
+        0x16,
+        0,
+        0,
+      ]),
+      _ => null,
+    };
+    if (response != null) {
+      transport.emitNotification(
+        write.deviceId,
+        write.characteristic,
+        response,
+      );
+    }
+  };
+}
+
 void main() {
   test('scan returns the de-duplicated advertisement snapshot', () async {
     final transport = FakeBleTransport();
@@ -226,6 +298,43 @@ void main() {
 
     expect(transport.connectCallCount, 1);
     expect(transport.writes, isEmpty);
+  });
+
+  test(
+    'readMediaInfo returns interpreted media without reconnecting',
+    () async {
+      final transport = FakeBleTransport(services: <BleService>[_printService]);
+      final printer = D11hPrinter.withTransport(transport);
+      addTearDown(printer.dispose);
+      _respondToMediaProbeWrites(transport);
+
+      await _completeConnection(printer.connect(_deviceId), transport);
+      final connectCount = transport.connectCallCount;
+
+      final info = await printer.readMediaInfo(
+        profile: D11hMediaRollProfile(
+          totalLabels: 260,
+          baselineCounter: 256,
+          name: '12x22',
+        ),
+      );
+
+      expect(transport.connectCallCount, connectCount);
+      expect(info.state, D11hMediaState.loaded);
+      expect(info.candidateCode, 'PC0G428330005464');
+      expect(info.remainingEstimate?.remainingLabels, 259);
+      expect(transport.writes.map((write) => write.bytes[2]).toList(), <int>[
+        0x1A,
+        0xA3,
+      ]);
+    },
+  );
+
+  test('readMediaInfo rejects use before connecting', () async {
+    final printer = D11hPrinter.withTransport(FakeBleTransport());
+    addTearDown(printer.dispose);
+
+    await expectLater(printer.readMediaInfo(), throwsStateError);
   });
 
   test('print requests execute in FIFO order', () async {

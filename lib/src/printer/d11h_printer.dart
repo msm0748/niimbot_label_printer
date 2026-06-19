@@ -7,6 +7,7 @@ import '../label/label_models.dart';
 import '../label/monochrome_raster.dart';
 import '../label/text_label_renderer.dart';
 import '../research/probe_controller.dart';
+import 'd11h_media_info.dart';
 import 'd11h_print_characteristic.dart';
 
 final class D11hPrinter {
@@ -85,17 +86,13 @@ final class D11hPrinter {
 
   Future<void> disconnect() => _enqueue(_controller.disconnect);
 
-  Future<void> printLabel(LabelDocument document) async {
-    final raster = await const TextLabelRenderer().render(document);
-    await printRenderedLabel(raster);
-  }
-
-  /// Prints a pre-rendered raster on the current connection, matching the
-  /// d11h_probe path: no reconnect, no GATT refresh.
-  Future<void> printRenderedLabel(MonochromeRaster raster) => _enqueue(() async {
+  Future<D11hMediaInfo> readMediaInfo({
+    D11hMediaRollProfile? profile,
+    bool includeStatus = true,
+  }) => _enqueue(() async {
     if (_controller.connectedDevice == null) {
       throw StateError(
-        'Cannot print a label before connecting with connect().',
+        'Cannot read media information before connecting with connect().',
       );
     }
 
@@ -106,12 +103,43 @@ final class D11hPrinter {
         'notify and writeWithoutResponse.',
       );
     }
-    await _controller.printRaster(
+
+    final result = await _controller.queryMediaProbe(
       characteristic,
-      raster,
-      interWriteDelay: _rasterInterWriteDelay,
+      includeStatus: includeStatus,
     );
+    return D11hMediaInfo.fromProbeResult(result, profile: profile);
   });
+
+  Future<void> printLabel(LabelDocument document) async {
+    final raster = await const TextLabelRenderer().render(document);
+    await printRenderedLabel(raster);
+  }
+
+  /// Prints a pre-rendered raster on the current connection, matching the
+  /// d11h_probe path: no reconnect, no GATT refresh.
+  Future<void> printRenderedLabel(MonochromeRaster raster) => _enqueue(
+    () async {
+      if (_controller.connectedDevice == null) {
+        throw StateError(
+          'Cannot print a label before connecting with connect().',
+        );
+      }
+
+      final characteristic = findD11hPrintCharacteristic(_controller.services);
+      if (characteristic == null) {
+        throw StateError(
+          'Connected device does not expose D11H FFF0/FFF1 with '
+          'notify and writeWithoutResponse.',
+        );
+      }
+      await _controller.printRaster(
+        characteristic,
+        raster,
+        interWriteDelay: _rasterInterWriteDelay,
+      );
+    },
+  );
 
   Future<void> _warmPrintChannel() async {
     final characteristic = findD11hPrintCharacteristic(_controller.services);
