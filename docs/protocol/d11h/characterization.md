@@ -106,6 +106,18 @@ Do not promote any byte to a named media field until repeated runs confirm it.
 Do not claim media SKU detection until at least two different media rolls are
 tested.
 
+Observed iOS D11H media-counter behavior:
+
+- The final two information payload bytes are little-endian.
+- They increase by one per printed label.
+- A 12x22 roll with a 260-label user-provided total was observed at baseline
+  `00 01` (256).
+- A 12x30 roll with a 195-label user-provided total was observed with a
+  first-seen baseline of `03 01` (259).
+
+Remaining estimates require application-provided total labels and baseline
+counter values. The payload has not shown a direct total-label field.
+
 ## Verified Facts
 
 Move a fact here only after it is reproduced at least three times on Android and

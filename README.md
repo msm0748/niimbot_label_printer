@@ -109,6 +109,32 @@ try {
 - `scan()` disconnects an active printer before discovery and ends with an
   explicit `stopScan()` so iOS scan results are not lost to timeout cleanup.
 
+### Media information
+
+Media information is opt-in. The library does not read media automatically
+before printing, and it does not include built-in total-label counts.
+Applications provide their own roll profile when they want remaining-label
+estimates:
+
+```dart
+final info = await printer.readMediaInfo(
+  profile: D11hMediaRollProfile(
+    totalLabels: 260,
+    baselineCounter: 256,
+    name: '12x22 roll',
+  ),
+);
+
+print(info.state);
+print(info.usageCounter);
+print(info.remainingEstimate?.remainingLabels);
+print(info.remainingEstimate?.remainingPercent);
+```
+
+Without a profile, the library reports loaded/not-loaded state, candidate
+identifiers, raw frames, and the observed counter, but remaining labels are
+unknown.
+
 ### Print characteristic discovery
 
 `findD11hPrintCharacteristic()` prefers FFF0/FFF1, then falls back to any
