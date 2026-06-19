@@ -59,6 +59,16 @@ final class D11hMediaRollProfile {
     );
   }
 
+  static final d11h12x22 = D11hMediaRollProfile.fromTotalLabels(
+    totalLabels: 260,
+    name: '12x22',
+  );
+
+  static final d11h12x30 = D11hMediaRollProfile.fromTotalLabels(
+    totalLabels: 195,
+    name: '12x30',
+  );
+
   final int totalLabels;
   final int counterAtBaseline;
   final int remainingLabelsAtBaseline;

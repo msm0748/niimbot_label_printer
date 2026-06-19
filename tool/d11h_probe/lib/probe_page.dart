@@ -225,13 +225,21 @@ class _ProbePageState extends State<ProbePage> {
   D11hMediaRollProfile? _mediaProfile() {
     final totalText = _mediaTotalLabels.text.trim();
     if (totalText.isEmpty) {
-      return null;
+      return _selectedMediaProfilePreset();
     }
     final total = int.tryParse(totalText);
     if (total == null || total <= 0) {
       return null;
     }
     return D11hMediaRollProfile.fromTotalLabels(totalLabels: total);
+  }
+
+  D11hMediaRollProfile _selectedMediaProfilePreset() {
+    return switch (_labelSizePreset) {
+      '12x22' => D11hMediaRollProfile.d11h12x22,
+      '12x30' => D11hMediaRollProfile.d11h12x30,
+      _ => D11hMediaRollProfile.d11h12x22,
+    };
   }
 
   Future<void> _printTextLabel(BleCharacteristic characteristic) async {

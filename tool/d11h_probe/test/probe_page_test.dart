@@ -250,6 +250,43 @@ void main() {
     );
   });
 
+  testWidgets('uses default total labels when total input is empty', (
+    tester,
+  ) async {
+    final transport = _ProbeTestTransport(mediaCounter: 456);
+    final controller = ProbeController(transport);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ProbePage(
+          controller: controller,
+          requestPermissions: () async => true,
+          scanDuration: const Duration(milliseconds: 20),
+          rasterInterWriteDelay: Duration.zero,
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Scan for D11H'));
+    await tester.pump();
+    transport.emitAdvertisement();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 25));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('D11_H'));
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('Media probe'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Counter: 456'), findsOneWidget);
+    expect(find.textContaining('Remaining: 60 / 260 (23.1%)'), findsOneWidget);
+  });
+
   testWidgets('uses total labels and detected counter for used-roll percent', (
     tester,
   ) async {

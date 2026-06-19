@@ -118,10 +118,7 @@ estimates:
 
 ```dart
 final info = await printer.readMediaInfo(
-  profile: D11hMediaRollProfile.fromTotalLabels(
-    totalLabels: 260,
-    name: '12x22 roll',
-  ),
+  profile: D11hMediaRollProfile.d11h12x22,
 );
 
 print(info.state);
@@ -135,11 +132,18 @@ counter of `256`. With that profile, applications only provide the roll's total
 label count; the current RFID counter determines the remaining labels and
 percentage.
 
+Built-in D11H profiles are available for the common rolls observed so far:
+
+```dart
+D11hMediaRollProfile.d11h12x22 // 260 labels
+D11hMediaRollProfile.d11h12x30 // 195 labels
+```
+
 To auto-detect media after connecting, call `readMediaInfo()` immediately after
 `connect()` in the app layer. The probe app does this so iOS testing shows the
 loaded roll, counter, and remaining percentage as soon as the printer connects.
-In the probe app, enter only `Total labels`; the app uses the detected counter
-to show the remaining percentage.
+In the probe app, leave `Total labels` empty to use the selected 12x22/12x30
+default, or enter a custom total when testing another roll.
 
 Without a profile, the library reports loaded/not-loaded state, candidate
 identifiers, raw frames, and the observed counter, but remaining labels are

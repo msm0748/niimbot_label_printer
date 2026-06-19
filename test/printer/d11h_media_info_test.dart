@@ -69,6 +69,18 @@ void main() {
     expect(estimate.isOutOfRange, isFalse);
   });
 
+  test('provides default profiles for common D11H roll sizes', () {
+    expect(D11hMediaRollProfile.d11h12x22.totalLabels, 260);
+    expect(D11hMediaRollProfile.d11h12x22.counterAtBaseline, 256);
+    expect(D11hMediaRollProfile.d11h12x22.remainingLabelsAtBaseline, 260);
+    expect(D11hMediaRollProfile.d11h12x22.name, '12x22');
+
+    expect(D11hMediaRollProfile.d11h12x30.totalLabels, 195);
+    expect(D11hMediaRollProfile.d11h12x30.counterAtBaseline, 256);
+    expect(D11hMediaRollProfile.d11h12x30.remainingLabelsAtBaseline, 195);
+    expect(D11hMediaRollProfile.d11h12x30.name, '12x30');
+  });
+
   test('parses 12x30 loaded response with caller profile', () {
     final payload = parseHexBytes(
       '88 1d 2c 87 98 1a 10 80 '
