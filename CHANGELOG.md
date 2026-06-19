@@ -1,3 +1,11 @@
+## 0.1.0-dev.10
+
+* Add D11H media information parsing and remaining-label percentage estimates.
+* Add default D11H media roll profiles for 12x22 (260 labels) and 12x30
+  (195 labels).
+* Update the internal D11H probe app to auto-detect media on connect and use the
+  selected/default total label count for remaining percentage.
+
 ## 0.1.0-dev.9
 
 * Align print characteristic discovery with d11h_probe (notify + writeWithoutResponse fallback).
