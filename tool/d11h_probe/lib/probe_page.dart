@@ -67,6 +67,8 @@ class _ProbePageState extends State<ProbePage> {
   final _labelText = TextEditingController(text: 'Hello');
   final _customWidth = TextEditingController(text: '22');
   final _customHeight = TextEditingController(text: '12');
+  final _mediaTotalLabels = TextEditingController();
+  final _mediaBaselineCounter = TextEditingController();
   var _busy = false;
   var _labelSizePreset = '12x22';
   var _labelOrientation = LabelOrientation.normal;
@@ -95,6 +97,8 @@ class _ProbePageState extends State<ProbePage> {
     _labelText.dispose();
     _customWidth.dispose();
     _customHeight.dispose();
+    _mediaTotalLabels.dispose();
+    _mediaBaselineCounter.dispose();
     super.dispose();
   }
 
@@ -197,6 +201,35 @@ class _ProbePageState extends State<ProbePage> {
         setState(() => _busy = false);
       }
     }
+  }
+
+  D11hMediaRollProfile? _mediaProfile() {
+    final totalText = _mediaTotalLabels.text.trim();
+    final baselineText = _mediaBaselineCounter.text.trim();
+    if (totalText.isEmpty || baselineText.isEmpty) {
+      return null;
+    }
+    final total = int.tryParse(totalText);
+    final baseline = int.tryParse(baselineText);
+    if (total == null || total <= 0 || baseline == null || baseline < 0) {
+      return null;
+    }
+    return D11hMediaRollProfile(totalLabels: total, baselineCounter: baseline);
+  }
+
+  void _useLatestCounterAsBaseline() {
+    final result = _mediaProbeResult;
+    if (result == null) {
+      _showMessage('Run Detect media first.');
+      return;
+    }
+    final info = D11hMediaInfo.fromProbeResult(result);
+    final counter = info.usageCounter;
+    if (counter == null) {
+      _showMessage('No media counter available.');
+      return;
+    }
+    setState(() => _mediaBaselineCounter.text = '$counter');
   }
 
   Future<void> _printTextLabel(BleCharacteristic characteristic) async {
@@ -335,6 +368,35 @@ class _ProbePageState extends State<ProbePage> {
                 icon: const Icon(Icons.print_outlined),
                 label: const Text('Print captured test label'),
               ),
+            if (connected && capturedPrintCharacteristic != null) ...<Widget>[
+              const SizedBox(height: 8),
+              TextField(
+                key: const Key('media-total-input'),
+                controller: _mediaTotalLabels,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Total labels',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                key: const Key('media-baseline-input'),
+                controller: _mediaBaselineCounter,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Baseline counter',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton(
+                onPressed: _mediaProbeResult == null
+                    ? null
+                    : _useLatestCounterAsBaseline,
+                child: const Text('Use counter as baseline'),
+              ),
+            ],
             if (connected && capturedPrintCharacteristic != null)
               FilledButton.icon(
                 onPressed: _busy
@@ -351,7 +413,7 @@ class _ProbePageState extends State<ProbePage> {
               ),
               const SizedBox(height: 8),
               SelectableText(
-                _formatMediaProbeResult(result),
+                _formatMediaProbeResult(result, profile: _mediaProfile()),
                 style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
               ),
             ],
@@ -806,16 +868,29 @@ class _ProbePageState extends State<ProbePage> {
   }
 }
 
-String _formatMediaProbeResult(D11hMediaProbeResult result) {
-  final information = result.informationResponse;
+String _formatMediaProbeResult(
+  D11hMediaProbeResult result, {
+  D11hMediaRollProfile? profile,
+}) {
+  final info = D11hMediaInfo.fromProbeResult(result, profile: profile);
   final status = result.statusResponse;
   final lines = <String>[
-    'Information 0x${_formatCommand(information.command)}: '
-        '${information.payloadHex}',
+    'State: ${info.state.name}',
+    if (info.candidateSerial != null)
+      'Serial candidate: ${info.candidateSerial}',
+    if (info.candidateCode != null) 'Code candidate: ${info.candidateCode}',
+    if (info.usageCounter != null) 'Counter: ${info.usageCounter}',
+    if (info.remainingEstimate case final estimate?)
+      'Remaining: ${estimate.remainingLabels} / ${estimate.totalLabels} '
+          '(${estimate.remainingPercent.toStringAsFixed(1)}%)'
+    else
+      'Remaining: unknown',
+    'Raw information 0x${_formatCommand(result.informationResponse.command)}: '
+        '${result.informationResponse.payloadHex}',
   ];
   if (status != null) {
     lines.add(
-      'Status 0x${_formatCommand(status.command)}: ${status.payloadHex}',
+      'Raw status 0x${_formatCommand(status.command)}: ${status.payloadHex}',
     );
   }
   return lines.join('\n');
