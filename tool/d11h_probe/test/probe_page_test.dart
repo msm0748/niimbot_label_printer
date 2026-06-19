@@ -102,7 +102,7 @@ void main() {
     await tester.tap(find.text('Print one label'));
     await tester.pumpAndSettle(const Duration(milliseconds: 300));
 
-    expect(transport.writeCount, 13);
+    expect(transport.writeCount, 15);
     expect(find.text('Printer confirmed print completion.'), findsOneWidget);
   });
 
@@ -140,6 +140,12 @@ void main() {
     await tester.tap(find.text('D11_H'));
     await tester.pumpAndSettle();
 
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('label-text-input')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const Key('label-text-input')),
       'Codex label',
@@ -197,14 +203,147 @@ void main() {
     );
     expect(message.data, 'Printer confirmed text label.');
   });
+
+  testWidgets('detects media with profile and renders remaining percent', (
+    tester,
+  ) async {
+    final transport = _ProbeTestTransport();
+    final controller = ProbeController(transport);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ProbePage(
+          controller: controller,
+          requestPermissions: () async => true,
+          scanDuration: const Duration(milliseconds: 20),
+          rasterInterWriteDelay: Duration.zero,
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Scan for D11H'));
+    await tester.pump();
+    transport.emitAdvertisement();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 25));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('D11_H'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byKey(const Key('media-total-input')), '260');
+    tester.testTextInput.hide();
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('Media probe'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('State: loaded'), findsOneWidget);
+    expect(find.textContaining('Counter: 257'), findsOneWidget);
+    expect(find.textContaining('Remaining: 259 / 260 (99.6%)'), findsOneWidget);
+    expect(
+      find.textContaining('Raw status 0xB3: 00 01 64 64 15 16 00 00'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('uses default total labels when total input is empty', (
+    tester,
+  ) async {
+    final transport = _ProbeTestTransport(mediaCounter: 456);
+    final controller = ProbeController(transport);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ProbePage(
+          controller: controller,
+          requestPermissions: () async => true,
+          scanDuration: const Duration(milliseconds: 20),
+          rasterInterWriteDelay: Duration.zero,
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Scan for D11H'));
+    await tester.pump();
+    transport.emitAdvertisement();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 25));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('D11_H'));
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('Media probe'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Counter: 456'), findsOneWidget);
+    expect(find.textContaining('Remaining: 60 / 260 (23.1%)'), findsOneWidget);
+  });
+
+  testWidgets('uses total labels and detected counter for used-roll percent', (
+    tester,
+  ) async {
+    final transport = _ProbeTestTransport(mediaCounter: 456);
+    final controller = ProbeController(transport);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ProbePage(
+          controller: controller,
+          requestPermissions: () async => true,
+          scanDuration: const Duration(milliseconds: 20),
+          rasterInterWriteDelay: Duration.zero,
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Scan for D11H'));
+    await tester.pump();
+    transport.emitAdvertisement();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 25));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('D11_H'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byKey(const Key('media-total-input')), '260');
+    tester.testTextInput.hide();
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('Media probe'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Counter: 456'), findsOneWidget);
+    expect(find.textContaining('Remaining: 60 / 260 (23.1%)'), findsOneWidget);
+    expect(find.byKey(const Key('media-counter-baseline-input')), findsNothing);
+    expect(
+      find.byKey(const Key('media-remaining-baseline-input')),
+      findsNothing,
+    );
+    expect(find.text('Save tracking profile'), findsNothing);
+  });
 }
 
 final class _ProbeTestTransport implements BleTransport {
+  _ProbeTestTransport({this.mediaCounter = 257});
+
   final _scan = StreamController<BleAdvertisement>.broadcast();
   final _connections = StreamController<BleConnectionUpdate>.broadcast(
     sync: true,
   );
   final _notifications = StreamController<Uint8List>.broadcast(sync: true);
+  final int mediaCounter;
   int writeCount = 0;
   int rasterDataWriteCount = 0;
 
@@ -303,6 +442,54 @@ final class _ProbeTestTransport implements BleTransport {
       0x13 => '55 55 14 02 01 00 17 AA AA',
       0x15 => '55 55 16 01 01 16 AA AA',
       0x84 => '55 55 D3 03 01 02 01 D2 AA AA',
+      0x1A => formatHexBytes(
+        buildD11hCommand(0x1B, <int>[
+          0x88,
+          0x1d,
+          0x35,
+          0xd3,
+          0x07,
+          0x97,
+          0x00,
+          0x00,
+          0x0d,
+          0x36,
+          0x39,
+          0x37,
+          0x32,
+          0x38,
+          0x34,
+          0x32,
+          0x37,
+          0x34,
+          0x37,
+          0x35,
+          0x34,
+          0x39,
+          0x10,
+          0x50,
+          0x43,
+          0x30,
+          0x47,
+          0x34,
+          0x32,
+          0x38,
+          0x33,
+          0x33,
+          0x30,
+          0x30,
+          0x30,
+          0x35,
+          0x34,
+          0x36,
+          0x34,
+          0x01,
+          0x38,
+          0x00,
+          mediaCounter & 0xFF,
+          mediaCounter >> 8,
+        ]),
+      ),
       0xA3 => '55 55 B3 08 00 01 64 64 15 16 00 00 B9 AA AA',
       0xE3 => '55 55 E4 01 01 E4 AA AA',
       0xF3 => '55 55 F4 01 01 F4 AA AA',

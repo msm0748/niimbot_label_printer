@@ -109,6 +109,46 @@ try {
 - `scan()` disconnects an active printer before discovery and ends with an
   explicit `stopScan()` so iOS scan results are not lost to timeout cleanup.
 
+### Media information
+
+Media information is opt-in. The library does not read media automatically
+before printing, and it does not include built-in total-label counts.
+Applications provide their own roll profile when they want remaining-label
+estimates:
+
+```dart
+final info = await printer.readMediaInfo(
+  profile: D11hMediaRollProfile.d11h12x22,
+);
+
+print(info.state);
+print(info.usageCounter);
+print(info.remainingEstimate?.remainingLabels);
+print(info.remainingEstimate?.remainingPercent);
+```
+
+`D11hMediaRollProfile.fromTotalLabels()` uses the observed D11H full-roll
+counter of `256`. With that profile, applications only provide the roll's total
+label count; the current RFID counter determines the remaining labels and
+percentage.
+
+Built-in D11H profiles are available for the common rolls observed so far:
+
+```dart
+D11hMediaRollProfile.d11h12x22 // 260 labels
+D11hMediaRollProfile.d11h12x30 // 195 labels
+```
+
+To auto-detect media after connecting, call `readMediaInfo()` immediately after
+`connect()` in the app layer. The probe app does this so iOS testing shows the
+loaded roll, counter, and remaining percentage as soon as the printer connects.
+In the probe app, leave `Total labels` empty to use the selected 12x22/12x30
+default, or enter a custom total when testing another roll.
+
+Without a profile, the library reports loaded/not-loaded state, candidate
+identifiers, raw frames, and the observed counter, but remaining labels are
+unknown.
+
 ### Print characteristic discovery
 
 `findD11hPrintCharacteristic()` prefers FFF0/FFF1, then falls back to any

@@ -238,37 +238,40 @@ void main() {
       );
     });
 
-    test('clears connection state when the link drops while connected', () async {
-      final transport = FakeBleTransport(
-        services: <BleService>[service],
-        negotiatedMtu: 185,
-      );
-      final controller = ProbeController(transport);
-      addTearDown(controller.dispose);
+    test(
+      'clears connection state when the link drops while connected',
+      () async {
+        final transport = FakeBleTransport(
+          services: <BleService>[service],
+          negotiatedMtu: 185,
+        );
+        final controller = ProbeController(transport);
+        addTearDown(controller.dispose);
 
-      final connectFuture = controller.connect(deviceId);
-      transport.emitConnectionUpdate(
-        const BleConnectionUpdate(
-          deviceId: deviceId,
-          status: BleConnectionStatus.connected,
-        ),
-      );
-      await connectFuture;
+        final connectFuture = controller.connect(deviceId);
+        transport.emitConnectionUpdate(
+          const BleConnectionUpdate(
+            deviceId: deviceId,
+            status: BleConnectionStatus.connected,
+          ),
+        );
+        await connectFuture;
 
-      expect(controller.connectedDevice, deviceId);
+        expect(controller.connectedDevice, deviceId);
 
-      transport.emitConnectionUpdate(
-        const BleConnectionUpdate(
-          deviceId: deviceId,
-          status: BleConnectionStatus.disconnected,
-        ),
-      );
-      await Future<void>.delayed(Duration.zero);
+        transport.emitConnectionUpdate(
+          const BleConnectionUpdate(
+            deviceId: deviceId,
+            status: BleConnectionStatus.disconnected,
+          ),
+        );
+        await Future<void>.delayed(Duration.zero);
 
-      expect(controller.connectedDevice, isNull);
-      expect(controller.services, isEmpty);
-      expect(controller.mtu, isNull);
-    });
+        expect(controller.connectedDevice, isNull);
+        expect(controller.services, isEmpty);
+        expect(controller.mtu, isNull);
+      },
+    );
 
     test('fails without hanging when discovery throws', () async {
       final transport = FakeBleTransport()
@@ -687,6 +690,75 @@ void main() {
 
       expect(transport.writes, hasLength(2));
     });
+
+    test('queries media probe information and idle status responses', () async {
+      transport.writeResponder = (write) {
+        final command = splitD11hFrames(write.bytes).single[2];
+        final response = switch (command) {
+          0x1A => '55 55 1B 03 01 02 03 18 AA AA',
+          0xA3 => '55 55 B3 04 00 01 64 64 B6 AA AA',
+          _ => throw StateError('Unexpected command $command'),
+        };
+        scheduleMicrotask(
+          () => transport.emitNotification(
+            deviceId,
+            capturedPrintCharacteristic,
+            parseHexBytes(response),
+          ),
+        );
+      };
+
+      final result = await controller.queryMediaProbe(
+        capturedPrintCharacteristic,
+      );
+
+      expect(transport.subscribeCallCount, 1);
+      expect(
+        transport.writes
+            .map((write) => splitD11hFrames(write.bytes).single[2])
+            .toList(),
+        <int>[0x1A, 0xA3],
+      );
+      expect(result.informationResponse.command, 0x1B);
+      expect(result.informationResponse.payloadHex, '01 02 03');
+      expect(result.statusResponse?.command, 0xB3);
+      expect(result.statusResponse?.payloadHex, '00 01 64 64');
+    });
+
+    test('can query media probe without idle status', () async {
+      transport.writeResponder = (write) {
+        scheduleMicrotask(
+          () => transport.emitNotification(
+            deviceId,
+            capturedPrintCharacteristic,
+            parseHexBytes('55 55 1B 01 09 13 AA AA'),
+          ),
+        );
+      };
+
+      final result = await controller.queryMediaProbe(
+        capturedPrintCharacteristic,
+        includeStatus: false,
+      );
+
+      expect(
+        transport.writes
+            .map((write) => splitD11hFrames(write.bytes).single[2])
+            .toList(),
+        <int>[0x1A],
+      );
+      expect(result.statusResponse, isNull);
+    });
+
+    test(
+      'media probe validates notify and writeWithoutResponse capability',
+      () {
+        expect(
+          controller.queryMediaProbe(writeCharacteristic),
+          throwsA(isA<StateError>()),
+        );
+      },
+    );
 
     test('replays the captured test print after subscribing', () async {
       transport.writeResponder = (write) {

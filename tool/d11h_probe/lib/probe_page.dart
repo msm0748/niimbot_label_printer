@@ -67,6 +67,7 @@ class _ProbePageState extends State<ProbePage> {
   final _labelText = TextEditingController(text: 'Hello');
   final _customWidth = TextEditingController(text: '22');
   final _customHeight = TextEditingController(text: '12');
+  final _mediaTotalLabels = TextEditingController();
   var _busy = false;
   var _labelSizePreset = '12x22';
   var _labelOrientation = LabelOrientation.normal;
@@ -75,6 +76,7 @@ class _ProbePageState extends State<ProbePage> {
   var _labelFontSize = 18.0;
   var _labelWrap = true;
   Future<MonochromeRaster>? _previewFuture;
+  D11hMediaProbeResult? _mediaProbeResult;
 
   @override
   void initState() {
@@ -94,6 +96,7 @@ class _ProbePageState extends State<ProbePage> {
     _labelText.dispose();
     _customWidth.dispose();
     _customHeight.dispose();
+    _mediaTotalLabels.dispose();
     super.dispose();
   }
 
@@ -125,6 +128,21 @@ class _ProbePageState extends State<ProbePage> {
       await widget.controller.connect(deviceId);
     } catch (error) {
       _showMessage('Connection failed: $error');
+      if (mounted) {
+        setState(() => _busy = false);
+      }
+      return;
+    }
+
+    try {
+      final characteristic = findD11hPrintCharacteristic(
+        widget.controller.services,
+      );
+      if (characteristic != null) {
+        await _readMediaProbe(characteristic);
+      }
+    } catch (error) {
+      _showMessage('Auto media probe failed: $error');
     } finally {
       if (mounted) {
         setState(() => _busy = false);
@@ -181,6 +199,47 @@ class _ProbePageState extends State<ProbePage> {
         setState(() => _busy = false);
       }
     }
+  }
+
+  Future<void> _detectMedia(BleCharacteristic characteristic) async {
+    setState(() => _busy = true);
+    try {
+      await _readMediaProbe(characteristic);
+      _showMessage('Media probe completed.');
+    } catch (error) {
+      _showMessage('Media probe failed: $error');
+    } finally {
+      if (mounted) {
+        setState(() => _busy = false);
+      }
+    }
+  }
+
+  Future<void> _readMediaProbe(BleCharacteristic characteristic) async {
+    final result = await widget.controller.queryMediaProbe(characteristic);
+    if (mounted) {
+      setState(() => _mediaProbeResult = result);
+    }
+  }
+
+  D11hMediaRollProfile? _mediaProfile() {
+    final totalText = _mediaTotalLabels.text.trim();
+    if (totalText.isEmpty) {
+      return _selectedMediaProfilePreset();
+    }
+    final total = int.tryParse(totalText);
+    if (total == null || total <= 0) {
+      return null;
+    }
+    return D11hMediaRollProfile.fromTotalLabels(totalLabels: total);
+  }
+
+  D11hMediaRollProfile _selectedMediaProfilePreset() {
+    return switch (_labelSizePreset) {
+      '12x22' => D11hMediaRollProfile.d11h12x22,
+      '12x30' => D11hMediaRollProfile.d11h12x30,
+      _ => D11hMediaRollProfile.d11h12x22,
+    };
   }
 
   Future<void> _printTextLabel(BleCharacteristic characteristic) async {
@@ -319,6 +378,39 @@ class _ProbePageState extends State<ProbePage> {
                 icon: const Icon(Icons.print_outlined),
                 label: const Text('Print captured test label'),
               ),
+            if (connected && capturedPrintCharacteristic != null) ...<Widget>[
+              const SizedBox(height: 8),
+              TextField(
+                key: const Key('media-total-input'),
+                controller: _mediaTotalLabels,
+                onChanged: (_) => setState(() {}),
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Total labels',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+            if (connected && capturedPrintCharacteristic != null)
+              FilledButton.icon(
+                onPressed: _busy
+                    ? null
+                    : () => _detectMedia(capturedPrintCharacteristic),
+                icon: const Icon(Icons.sensors_outlined),
+                label: const Text('Detect media'),
+              ),
+            if (_mediaProbeResult case final result?) ...<Widget>[
+              const SizedBox(height: 12),
+              Text(
+                'Media probe',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 8),
+              SelectableText(
+                _formatMediaProbeResult(result, profile: _mediaProfile()),
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+              ),
+            ],
             const SizedBox(height: 16),
             Text('Devices', style: Theme.of(context).textTheme.titleLarge),
             if (devices.isEmpty)
@@ -769,6 +861,37 @@ class _ProbePageState extends State<ProbePage> {
     }
   }
 }
+
+String _formatMediaProbeResult(
+  D11hMediaProbeResult result, {
+  D11hMediaRollProfile? profile,
+}) {
+  final info = D11hMediaInfo.fromProbeResult(result, profile: profile);
+  final status = result.statusResponse;
+  final lines = <String>[
+    'State: ${info.state.name}',
+    if (info.candidateSerial != null)
+      'Serial candidate: ${info.candidateSerial}',
+    if (info.candidateCode != null) 'Code candidate: ${info.candidateCode}',
+    if (info.usageCounter != null) 'Counter: ${info.usageCounter}',
+    if (info.remainingEstimate case final estimate?)
+      'Remaining: ${estimate.remainingLabels} / ${estimate.totalLabels} '
+          '(${estimate.remainingPercent.toStringAsFixed(1)}%)'
+    else
+      'Remaining: unknown',
+    'Raw information 0x${_formatCommand(result.informationResponse.command)}: '
+        '${result.informationResponse.payloadHex}',
+  ];
+  if (status != null) {
+    lines.add(
+      'Raw status 0x${_formatCommand(status.command)}: ${status.payloadHex}',
+    );
+  }
+  return lines.join('\n');
+}
+
+String _formatCommand(int command) =>
+    command.toRadixString(16).toUpperCase().padLeft(2, '0');
 
 class _StatusCard extends StatelessWidget {
   const _StatusCard({
